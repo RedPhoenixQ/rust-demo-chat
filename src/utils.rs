@@ -1,4 +1,4 @@
-use sqlx::types::time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 pub trait MyUuidExt {
@@ -7,7 +7,9 @@ pub trait MyUuidExt {
 
 impl MyUuidExt for Uuid {
     fn get_datetime(&self) -> Option<OffsetDateTime> {
-        let (timestamp, _nanos) = self.get_timestamp()?.to_unix();
-        OffsetDateTime::from_unix_timestamp(timestamp as i64).ok()
+        let (timestamp, nanos) = self.get_timestamp()?.to_unix();
+        OffsetDateTime::from_unix_timestamp(timestamp as i64)
+            .map(|datetime| datetime + Duration::nanoseconds(nanos.into()))
+            .ok()
     }
 }
