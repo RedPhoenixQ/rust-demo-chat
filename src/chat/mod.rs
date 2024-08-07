@@ -1,9 +1,9 @@
 use axum::{
     extract::{Path, Request, State}, http::StatusCode, middleware::{from_fn_with_state, Next}, response::IntoResponse, routing, Router
 };
-use maud::Markup;
+use maud::{html, Markup};
 use serde::Deserialize;
-use sqlx::query;
+use sqlx::{query, PgPool};
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
@@ -23,7 +23,7 @@ pub fn router(state: AppState) -> Router<AppState> {
     Router::new().nest(
         "/channels/:server_id",
         Router::<AppState>::new()
-            .route("/:channel_id", routing::get(get_messages))
+            .route("/:channel_id", routing::get(get_chat_page))
             .route_layer(from_fn_with_state(state.clone(), is_user_member_of_server)),
     )
 }
@@ -46,87 +46,21 @@ async fn is_user_member_of_server(
     }
 }
 
-async fn get_messages(
+async fn get_chat_page(
     State(state): State<AppState>,
     Path(ChannelId { channel_id }): Path<ChannelId>,
     Path(ServerId { server_id }): Path<ServerId>,
 ) -> Markup {
-    let servers = query!(
-        r#"SELECT s.id, s.name
-    FROM servers AS s
-    WHERE EXISTS (
-        SELECT * FROM users_member_of_servers WHERE "user" = $1
-    )"#,
-        USER_ID.unwrap(),
-    )
-    .fetch_all(&state.db)
-    .await
-    .unwrap();
+    fetch_render_chat_page(&state.db, server_id, channel_id, USER_ID.unwrap()).await
+}
 
-    let channels = query!(
-        r#"SELECT c.id, c.name
-    FROM channels AS c
-    WHERE c.server = $1"#,
-        server_id,
-    )
-    .fetch_all(&state.db)
-    .await
-    .unwrap();
-
-    let messages = query!(
-        r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
-    FROM messages AS m
-    JOIN chat_users AS u ON u.id = m.author
-    WHERE m.channel = $1"#,
-        channel_id,
-    )
-    .fetch_all(&state.db)
-    .await
-    .unwrap();
-
-    base_tempalte(maud::html!(
+async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Uuid, user_id: Uuid) -> Markup {
+    base_tempalte(html!(
         main class="max-h-dvh grid h-screen max-h-screen px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
-            ul.menu.bg-base-200.rounded-box #server-list {
-                @for server in servers {
-                    li { a href={"/channels/"(server.id)} { (server.name) } }
-                }
-            }
-            ul.menu.bg-base-200.rounded-box #channels-list {
-                li { 
-                    details open {
-                        summary { "Group" }
-                        ul {
-                            @for channel in channels {
-                                li { a href={"/channels/"(server_id)"/"(channel.id)} { (channel.name) } }
-                            }
-                        }   
-                    }
-                }
-            }
+            (fetch_render_server_list(pool, user_id).await)
+            (fetch_render_channel_list(pool, server_id).await)
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
-                ol #messages.flex.flex-col-reverse {
-                    @for msg in messages.into_iter().rev() {
-                        li.chat
-                            .chat-start[msg.author == USER_ID.unwrap()]
-                            .chat-end[msg.author != USER_ID.unwrap()] 
-                        {
-                            .chat-header {
-                                (msg.author_name) " "
-                                @let time = msg.id.get_datetime().unwrap();
-                                time.text-xs.opacity-50 datetime=(time.format(&Rfc3339).unwrap()) {
-                                    // TODO: Make this a human readable relative time (one minute ago, ...)
-                                    (time.to_string())
-                                }
-                            }
-                            .chat-bubble {
-                                (msg.content)
-                            }
-                            .chat-footer {
-                                (msg.updated.to_string())
-                            }
-                        }
-                    }
-                }
+                (fetch_render_message_list(pool, channel_id).await)
                 form #message-form.flex.items-end.gap-2 {
                     input.input.input-bordered.grow name="content" placeholder="Type here...";
                     button.btn.btn-primary { "Send" }
@@ -134,4 +68,92 @@ async fn get_messages(
             }
         }
     ))
+}
+
+async fn fetch_render_server_list(pool: &PgPool, user_id: Uuid) -> Markup {
+    let servers = query!(
+        r#"SELECT s.id, s.name
+    FROM servers AS s
+    WHERE EXISTS (
+        SELECT * FROM users_member_of_servers WHERE "user" = $1
+    )"#,
+        user_id,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+
+    html!(
+        ul.menu.bg-base-200.rounded-box #server-list {
+            @for server in servers {
+                li { a href={"/channels/"(server.id)} { (server.name) } }
+            }
+        }
+    )
+}
+
+async fn fetch_render_channel_list(pool: &PgPool,server_id: Uuid) -> Markup {
+    let channels = query!(
+        r#"SELECT c.id, c.name
+    FROM channels AS c
+    WHERE c.server = $1"#,
+        server_id,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+
+    html!(
+        ul.menu.bg-base-200.rounded-box #channels-list {
+            li { 
+                details open {
+                    summary { "Group" }
+                    ul {
+                        @for channel in channels {
+                            li { a href={"/channels/"(server_id)"/"(channel.id)} { (channel.name) } }
+                        }
+                    }   
+                }
+            }
+        }
+    )
+}
+
+async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid) -> Markup {
+    let messages = query!(
+        r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
+    FROM messages AS m
+    JOIN chat_users AS u ON u.id = m.author
+    WHERE m.channel = $1"#,
+        channel_id,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+
+    html!(
+        ol #messages.flex.flex-col-reverse {
+            @for msg in messages.into_iter().rev() {
+                li.chat
+                    .chat-start[msg.author == USER_ID.unwrap()]
+                    .chat-end[msg.author != USER_ID.unwrap()] 
+                {
+                    .chat-header {
+                        (msg.author_name) " "
+                        @let time = msg.id.get_datetime().unwrap();
+                        time.text-xs.opacity-50 datetime=(time.format(&Rfc3339).unwrap()) {
+                            // TODO: Make this a human readable relative time (one minute ago, ...)
+                            (time.to_string())
+                        }
+                    }
+                    .chat-bubble {
+                        (msg.content)
+                    }
+                    .chat-footer {
+                        (msg.updated.to_string())
+                    }
+                }
+            }
+        }
+    )
 }
