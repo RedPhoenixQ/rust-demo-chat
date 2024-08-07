@@ -37,7 +37,9 @@ struct AppState {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_tracing()?;
 
-    let db = PgPool::connect_lazy(&std::env::var("DATABASE_URL")?)?;
+    let state = AppState {
+        db: PgPool::connect_lazy(&std::env::var("DATABASE_URL")?)?,
+    };
 
     let router = Router::new()
         .route(
@@ -46,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 base_tempalte(maud::html!(span class="btn" {"Hello, World!"}))
             }),
         )
-        .nest("/", chat::router())
+        .nest("/", chat::router(state.clone()))
         .fallback_service(tower_http::services::ServeDir::new("assets"))
         .layer(
             tower_http::trace::TraceLayer::new_for_http().make_span_with(
@@ -67,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             ),
         )
-        .with_state(AppState { db });
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     info!("Listening on http://{}", listener.local_addr()?);
