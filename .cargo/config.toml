@@ -1,0 +1,2 @@
+[env]
+RUST_LOG = "rust_demo_chat=trace,tower_http=debug,axum::rejection=trace"

@@ -1,0 +1,10 @@
+{
+	"scripts": {
+		"tailwind": "pnpx tailwindcss -i ./src/styles.pcss -o ./assets/styles.css --watch",
+		"dev": "cargo watch -q -c -x \"run -q\""
+	},
+	"devDependencies": {
+		"tailwind": "^4.0.0",
+		"daisyui": "^4.12.10"
+	}
+}
