@@ -1,5 +1,6 @@
 use axum::Router;
 use maud::{html, PreEscaped};
+use sqlx::PgPool;
 use tracing::{info, info_span};
 
 const HTMX_SCRIPT: PreEscaped<&str> = PreEscaped(
@@ -24,9 +25,16 @@ fn base_tempalte(content: maud::Markup) -> maud::Markup {
     )
 }
 
+#[derive(Debug, Clone)]
+struct AppState {
+    db: PgPool,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_tracing()?;
+
+    let db = PgPool::connect_lazy(&std::env::var("DATABASE_URL")?)?;
 
     let router = Router::new()
         .route(
@@ -54,7 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     )
                 },
             ),
-        );
+        )
+        .with_state(AppState { db });
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     info!("Listening on http://{}", listener.local_addr()?);
