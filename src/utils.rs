@@ -1,7 +1,13 @@
 use sqlx::types::time::OffsetDateTime;
 use uuid::Uuid;
 
-pub fn uuid_to_date(uuid: Uuid) -> Option<OffsetDateTime> {
-    let t = uuid.get_timestamp()?;
-    OffsetDateTime::from_unix_timestamp(t.to_unix().0 as i64).ok()
+pub trait MyUuidExt {
+    fn get_datetime(&self) -> Option<OffsetDateTime>;
+}
+
+impl MyUuidExt for Uuid {
+    fn get_datetime(&self) -> Option<OffsetDateTime> {
+        let (timestamp, _nanos) = self.get_timestamp()?.to_unix();
+        OffsetDateTime::from_unix_timestamp(timestamp as i64).ok()
+    }
 }

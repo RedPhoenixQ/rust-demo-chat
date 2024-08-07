@@ -4,9 +4,10 @@ use axum::{
 use maud::Markup;
 use serde::Deserialize;
 use sqlx::query;
+use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
-use crate::{base_tempalte, utils::uuid_to_date, AppState};
+use crate::{base_tempalte, utils::MyUuidExt, AppState};
 
 #[derive(Deserialize)]
 struct ChannelId {
@@ -68,7 +69,7 @@ async fn get_messages(
                     .chat-header {
                         (msg.author_name)
                         span.text-xs.opacity-50 {
-                            (uuid_to_date(msg.id).unwrap().to_string())
+                            (msg.id.get_datetime().unwrap().to_string())
                         }
                     }
                     .chat-bubble {
