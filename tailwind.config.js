@@ -6,4 +6,18 @@ module.exports = {
 		themes: ["light", "dark"],
 	},
 	plugins: [require("daisyui")],
+	theme: {
+		maxHeight: {
+			screen: ["100vh", "100dvh"],
+			vh: "100vh",
+		},
+		minHeight: {
+			screen: ["100vh", "100dvh"],
+			vh: "100vh",
+		},
+		height: {
+			screen: ["100vh", "100dvh"],
+			vh: "100vh",
+		},
+	},
 };
