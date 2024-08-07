@@ -60,7 +60,7 @@ async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Uuid
             (fetch_render_server_list(pool, user_id).await)
             (fetch_render_channel_list(pool, server_id).await)
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
-                (fetch_render_message_list(pool, channel_id).await)
+                (fetch_render_message_list(pool, channel_id, user_id).await)
                 form #message-form.flex.items-end.gap-2 {
                     input.input.input-bordered.grow name="content" placeholder="Type here...";
                     button.btn.btn-primary { "Send" }
@@ -119,7 +119,7 @@ async fn fetch_render_channel_list(pool: &PgPool,server_id: Uuid) -> Markup {
     )
 }
 
-async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid) -> Markup {
+async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid, user_id: Uuid) -> Markup {
     let messages = query!(
         r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
     FROM messages AS m
@@ -131,12 +131,14 @@ async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid) -> Markup {
     .await
     .unwrap();
 
+
     html!(
         ol #messages.flex.flex-col-reverse {
             @for msg in messages.into_iter().rev() {
+                @let is_author = msg.author == user_id;
                 li.chat
-                    .chat-start[msg.author == USER_ID.unwrap()]
-                    .chat-end[msg.author != USER_ID.unwrap()] 
+                    .chat-end[is_author]
+                    .chat-start[!is_author] 
                 {
                     .chat-header {
                         (msg.author_name) " "
@@ -146,7 +148,7 @@ async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid) -> Markup {
                             (time.to_string())
                         }
                     }
-                    .chat-bubble {
+                    .chat-bubble.chat-bubble-primary[is_author] {
                         (msg.content)
                     }
                     .chat-footer {
