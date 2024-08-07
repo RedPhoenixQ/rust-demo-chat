@@ -85,13 +85,13 @@ async fn get_messages(
     .unwrap();
 
     base_tempalte(maud::html!(
-        div class="grid h-screen max-h-screen max-h-dvh px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
-            ul.menu.bg-base-200.rounded-box {
+        main class="max-h-dvh grid h-screen max-h-screen px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
+            ul.menu.bg-base-200.rounded-box #server-list {
                 @for server in servers {
                     li { a href={"/channels/"(server.id)} { (server.name) } }
                 }
             }
-            ul.menu.bg-base-200.rounded-box {
+            ul.menu.bg-base-200.rounded-box #channels-list {
                 li { 
                     details open {
                         summary { "Group" }
@@ -103,8 +103,8 @@ async fn get_messages(
                     }
                 }
             }
-            .grid style="grid-template-rows: 1fr auto" {
-                ol.flex.flex-col-reverse {
+            #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
+                ol #messages.flex.flex-col-reverse {
                     @for msg in messages.into_iter().rev() {
                         li.chat
                             .chat-start[msg.author == USER_ID.unwrap()]
@@ -127,7 +127,7 @@ async fn get_messages(
                         }
                     }
                 }
-                form.flex.items-end.gap-2 {
+                form #message-form.flex.items-end.gap-2 {
                     input.input.input-bordered.grow name="content" placeholder="Type here...";
                     button.btn.btn-primary { "Send" }
                 }
