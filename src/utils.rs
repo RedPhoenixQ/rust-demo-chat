@@ -1,4 +1,5 @@
-use sqlx::types::{time::OffsetDateTime, Uuid};
+use sqlx::types::time::OffsetDateTime;
+use uuid::Uuid;
 
 pub fn uuid_to_date(uuid: Uuid) -> Option<OffsetDateTime> {
     let t = uuid.get_timestamp()?;
