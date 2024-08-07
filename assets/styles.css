@@ -1568,10 +1568,6 @@ html {
   display: grid;
 }
 
-.h-screen {
-  height: 100vh;
-}
-
 .max-h-dvh {
   max-height: 100dvh;
 }
@@ -1588,6 +1584,10 @@ html {
   flex-grow: 1;
 }
 
+.grid-rows-1 {
+  grid-template-rows: repeat(1, minmax(0, 1fr));
+}
+
 .flex-col-reverse {
   flex-direction: column-reverse;
 }
@@ -1598,6 +1598,10 @@ html {
 
 .gap-2 {
   gap: 0.5rem;
+}
+
+.overflow-y-auto {
+  overflow-y: auto;
 }
 
 .rounded-box {

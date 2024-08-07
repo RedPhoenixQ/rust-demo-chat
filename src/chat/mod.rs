@@ -64,7 +64,7 @@ async fn get_chat_page(
 
 async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Uuid, user_id: Uuid) -> Markup {
     base_tempalte(html!(
-        main class="max-h-dvh grid h-screen max-h-screen px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
+        main class="max-h-dvh grid max-h-screen grid-rows-1 px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
             (fetch_render_server_list(pool, user_id).await)
             (fetch_render_channel_list(pool, server_id, channel_id).await)
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
@@ -145,7 +145,7 @@ async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid, user_id: Uui
     .unwrap();
 
     html!(
-        ol #messages.flex.flex-col-reverse {
+        ol #messages class="flex flex-col-reverse overflow-y-auto" {
             @for msg in messages.into_iter().rev() {
                 (render_message(msg, user_id))
             }
