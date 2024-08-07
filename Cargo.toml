@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.7.5", features = ["form", "tracing"] }
+axum-htmx = "0.6.0"
 maud = { version = "0.26.0", features = ["axum"] }
 serde = { version = "1.0.204", features = ["derive"] }
 sqlx = { version = "0.8.0", features = [

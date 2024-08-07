@@ -1,6 +1,7 @@
 use axum::{
-    extract::{Path, Request, State}, http::StatusCode, middleware::{from_fn_with_state, Next}, response::IntoResponse, routing, Router
+    extract::{Path, Request, State}, http::StatusCode, middleware::{from_fn_with_state, Next}, response::IntoResponse, routing, Form, Router
 };
+use axum_htmx::{HxBoosted, HxRequest};
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::{query, query_as, PgPool};
@@ -31,7 +32,7 @@ pub fn router(state: AppState) -> Router<AppState> {
     Router::new().nest(
         "/channels/:server_id",
         Router::<AppState>::new()
-            .route("/:channel_id", routing::get(get_chat_page))
+            .route("/:channel_id", routing::get(get_chat_page).post(send_message))
             .route_layer(from_fn_with_state(state.clone(), is_user_member_of_server)),
     )
 }
@@ -54,6 +55,50 @@ async fn is_user_member_of_server(
     }
 }
 
+#[derive(Deserialize)]
+struct SentMessage {
+    content: String
+}
+async fn send_message(
+    State(state): State<AppState>,
+    HxRequest(hx_req): HxRequest,
+    HxBoosted(hx_boosted): HxBoosted,
+    Path(ChannelId { channel_id }): Path<ChannelId>,
+    Path(ServerId { server_id }): Path<ServerId>,
+    Form(sent_msg): Form<SentMessage>,
+) -> Markup {
+    let user_id = USER_ID.unwrap();
+    let new_id = Uuid::now_v7();
+    let rows_affected = query!(
+        r#"INSERT INTO messages (id, content, channel, author) VALUES ($1, $2, $3, $4)"#,
+        new_id,
+        sent_msg.content,
+        channel_id,
+        user_id
+    ).execute(&state.db).await.unwrap();
+
+    // TODO: Return a propper error when failing to insert row
+    assert_eq!(rows_affected.rows_affected(), 1);
+
+    if hx_req && !hx_boosted {
+        let msg = query_as!(
+            Message,
+            r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
+        FROM messages AS m
+        JOIN chat_users AS u ON u.id = m.author
+        WHERE m.id = $1"#,
+            new_id,
+        )
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+
+        render_message(msg, user_id)
+    } else {
+        fetch_render_chat_page(&state.db, server_id, channel_id, USER_ID.unwrap()).await
+    }
+}
+
 async fn get_chat_page(
     State(state): State<AppState>,
     Path(ChannelId { channel_id }): Path<ChannelId>,
@@ -69,7 +114,14 @@ async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Uuid
             (fetch_render_channel_list(pool, server_id, channel_id).await)
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
                 (fetch_render_message_list(pool, channel_id, user_id).await)
-                form #message-form.flex.items-end.gap-2 {
+                form #message-form.flex.items-end.gap-2 
+                    method="POST" 
+                    action=""
+                    hx-post=""
+                    hx-swap="afterbegin"
+                    hx-target="#messages"
+                    "hx-on::after-request"="if (event.detail.successful) this.reset()"
+                {
                     input.input.input-bordered.grow name="content" placeholder="Type here...";
                     button.btn.btn-primary { "Send" }
                 }
@@ -146,7 +198,7 @@ async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid, user_id: Uui
 
     html!(
         ol #messages class="flex flex-col-reverse overflow-y-auto" {
-            @for msg in messages.into_iter().rev() {
+            @for msg in messages {
                 (render_message(msg, user_id))
             }
         }
