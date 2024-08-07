@@ -67,9 +67,11 @@ async fn get_messages(
             @for msg in messages {
                 .chat.chat-start {
                     .chat-header {
-                        (msg.author_name)
-                        span.text-xs.opacity-50 {
-                            (msg.id.get_datetime().unwrap().to_string())
+                        (msg.author_name) " "
+                        @let time = msg.id.get_datetime().unwrap();
+                        time.text-xs.opacity-50 datetime=(time.format(&Rfc3339).unwrap()) {
+                            // TODO: Make this a human readable relative time (one minute ago, ...)
+                            (time.to_string())
                         }
                     }
                     .chat-bubble {
