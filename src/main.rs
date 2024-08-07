@@ -3,6 +3,8 @@ use maud::{html, PreEscaped};
 use sqlx::PgPool;
 use tracing::{info, info_span};
 
+mod utils;
+
 const HTMX_SCRIPT: PreEscaped<&str> = PreEscaped(
     #[cfg(debug_assertions)]
     r#"<script src="https://unpkg.com/htmx.org@2.0.1/dist/htmx.js" integrity="sha384-gpIh5aLQ0qmX8kZdyhsd6jA24uKLkqIr1WAGtantR4KsS97l/NRBvh8/8OYGThAf" crossorigin="anonymous"></script>"#,
