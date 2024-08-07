@@ -3,6 +3,7 @@ use maud::{html, PreEscaped};
 use sqlx::PgPool;
 use tracing::{info, info_span};
 
+mod chat;
 mod utils;
 
 const HTMX_SCRIPT: PreEscaped<&str> = PreEscaped(
@@ -45,7 +46,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 base_tempalte(maud::html!(span class="btn" {"Hello, World!"}))
             }),
         )
-        .nest_service("/", tower_http::services::ServeDir::new("assets"))
+        .nest("/", chat::router())
+        .fallback_service(tower_http::services::ServeDir::new("assets"))
         .layer(
             tower_http::trace::TraceLayer::new_for_http().make_span_with(
                 |request: &axum::http::Request<_>| {
