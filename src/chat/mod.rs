@@ -66,7 +66,7 @@ async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Uuid
     base_tempalte(html!(
         main class="max-h-dvh grid h-screen max-h-screen px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
             (fetch_render_server_list(pool, user_id).await)
-            (fetch_render_channel_list(pool, server_id).await)
+            (fetch_render_channel_list(pool, server_id, channel_id).await)
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
                 (fetch_render_message_list(pool, channel_id, user_id).await)
                 form #message-form.flex.items-end.gap-2 {
@@ -100,7 +100,7 @@ async fn fetch_render_server_list(pool: &PgPool, user_id: Uuid) -> Markup {
     )
 }
 
-async fn fetch_render_channel_list(pool: &PgPool,server_id: Uuid) -> Markup {
+async fn fetch_render_channel_list(pool: &PgPool, server_id: Uuid, channel_id: Uuid) -> Markup {
     let channels = query!(
         r#"SELECT c.id, c.name
     FROM channels AS c
@@ -118,7 +118,11 @@ async fn fetch_render_channel_list(pool: &PgPool,server_id: Uuid) -> Markup {
                     summary { "Group" }
                     ul {
                         @for channel in channels {
-                            li { a href={"/channels/"(server_id)"/"(channel.id)} { (channel.name) } }
+                            li { 
+                                a.active[channel.id == channel_id] 
+                                    href={"/channels/"(server_id)"/"(channel.id)} 
+                                { (channel.name) } 
+                            }
                         }
                     }   
                 }
