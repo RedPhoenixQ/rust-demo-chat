@@ -3,11 +3,19 @@ use axum::{
 };
 use maud::{html, Markup};
 use serde::Deserialize;
-use sqlx::{query, PgPool};
-use time::format_description::well_known::Rfc3339;
+use sqlx::{query, query_as, PgPool};
+use time::{format_description::well_known::Rfc3339, PrimitiveDateTime};
 use uuid::Uuid;
 
 use crate::{base_tempalte, utils::MyUuidExt, AppState};
+
+struct Message {
+    id: Uuid,
+    content: String,
+    updated: PrimitiveDateTime,
+    author: Uuid,
+    author_name: String,
+}
 
 #[derive(Deserialize)]
 struct ChannelId {
@@ -120,7 +128,8 @@ async fn fetch_render_channel_list(pool: &PgPool,server_id: Uuid) -> Markup {
 }
 
 async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid, user_id: Uuid) -> Markup {
-    let messages = query!(
+    let messages = query_as!(
+        Message,
         r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
     FROM messages AS m
     JOIN chat_users AS u ON u.id = m.author
@@ -131,30 +140,35 @@ async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid, user_id: Uui
     .await
     .unwrap();
 
-
     html!(
         ol #messages.flex.flex-col-reverse {
             @for msg in messages.into_iter().rev() {
-                @let is_author = msg.author == user_id;
-                li.chat
-                    .chat-end[is_author]
-                    .chat-start[!is_author] 
-                {
-                    .chat-header {
-                        (msg.author_name) " "
-                        @let time = msg.id.get_datetime().unwrap();
-                        time.text-xs.opacity-50 datetime=(time.format(&Rfc3339).unwrap()) {
-                            // TODO: Make this a human readable relative time (one minute ago, ...)
-                            (time.to_string())
-                        }
-                    }
-                    .chat-bubble.chat-bubble-primary[is_author] {
-                        (msg.content)
-                    }
-                    .chat-footer {
-                        (msg.updated.to_string())
-                    }
+                (render_message(msg, user_id))
+            }
+        }
+    )
+}
+
+fn render_message(msg: Message, user_id: Uuid) -> Markup {
+    let is_author = msg.author == user_id;
+    html!(
+        li.chat
+            .chat-end[is_author]
+            .chat-start[!is_author] 
+        {
+            .chat-header {
+                (msg.author_name) " "
+                @let time = msg.id.get_datetime().unwrap();
+                time.text-xs.opacity-50 datetime=(time.format(&Rfc3339).unwrap()) {
+                    // TODO: Make this a human readable relative time (one minute ago, ...)
+                    (time.to_string())
                 }
+            }
+            .chat-bubble.chat-bubble-primary[is_author] {
+                (msg.content)
+            }
+            .chat-footer {
+                (msg.updated.to_string())
             }
         }
     )
