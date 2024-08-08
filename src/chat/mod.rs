@@ -32,7 +32,7 @@ pub fn router(state: AppState) -> Router<AppState> {
     let is_member = from_fn_with_state(state.clone(), is_user_member_of_server);
     Router::new()
         .route(
-            "/channels/:server_id/:channel_id", 
+            "/servers/:server_id/channels/:channel_id", 
             routing::get(get_chat_page).post(send_message).layer(is_member)
         )
 }
@@ -147,7 +147,7 @@ async fn fetch_render_server_list(pool: &PgPool, user_id: Uuid) -> Markup {
     html!(
         ul.menu.bg-base-200.rounded-box #server-list {
             @for server in servers {
-                li { a href={"/channels/"(server.id)} { (server.name) } }
+                li { a href={"/servers/"(server.id)"/channels"} { (server.name) } }
             }
         }
     )
@@ -169,7 +169,7 @@ async fn fetch_render_channel_list(pool: &PgPool, server_id: Uuid, channel_id: U
             @for channel in channels {
                 li { 
                     a.active[channel.id == channel_id] 
-                        href={"/channels/"(server_id)"/"(channel.id)} 
+                        href={"/servers/"(server_id)"/channels/"(channel.id)} 
                     { (channel.name) } 
                 }
             }
