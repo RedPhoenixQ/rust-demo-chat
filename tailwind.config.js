@@ -2,6 +2,7 @@
 module.exports = {
 	content: ["src/**/*.{html,rs}"],
 	safelist: ["dark"],
+	blocklist: ["join"],
 	daisyui: {
 		themes: ["light", "dark"],
 	},
