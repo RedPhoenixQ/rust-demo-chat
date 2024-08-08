@@ -6,6 +6,7 @@ use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::{query, query_as, PgPool};
 use time::{format_description::well_known::Rfc3339, PrimitiveDateTime};
+use tokio::join;
 use uuid::Uuid;
 
 use crate::{auth::Auth, base_tempalte, utils::MyUuidExt, AppState};
@@ -164,13 +165,19 @@ async fn delete_channel(
 }
 
 async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Option<Uuid>, user_id: Uuid) -> Markup {
+    let (server_list, channel_list, messages_list) = join!(
+        fetch_render_server_list(pool, user_id),
+        fetch_render_channel_list(pool, server_id, channel_id),
+        async { Some(fetch_render_message_list(pool, channel_id?, user_id).await) }
+    );
+
     base_tempalte(html!(
         main class="grid max-h-screen min-h-screen grid-rows-1 px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
-            (fetch_render_server_list(pool, user_id).await)
-            (fetch_render_channel_list(pool, server_id, channel_id).await)
+            (server_list)
+            (channel_list)
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
-                @if let Some(active_channel) = channel_id {
-                    (fetch_render_message_list(pool, active_channel, user_id).await)
+                @if let Some(messages_list) = messages_list {
+                    (messages_list)
                     form #message-form.flex.items-end.gap-2 
                         method="POST" 
                         action=""
