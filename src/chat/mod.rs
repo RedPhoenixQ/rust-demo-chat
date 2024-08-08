@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Request, State}, http::StatusCode, middleware::{from_fn_with_state, Next}, response::IntoResponse, routing, Form, Router
 };
-use axum_htmx::{HxBoosted, HxRequest};
+use axum_htmx::{HxBoosted, HxRequest, HxResponseTrigger};
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::{query, query_as, PgPool};
@@ -22,6 +22,10 @@ struct Message {
 struct ChannelId {
     channel_id: Uuid,
 }
+#[derive(Deserialize)]
+struct MaybeChannelId {
+    channel_id: Option<Uuid>,
+}
 
 #[derive(Deserialize)]
 struct ServerId {
@@ -30,11 +34,15 @@ struct ServerId {
 
 pub fn router(state: AppState) -> Router<AppState> {
     let is_member = from_fn_with_state(state.clone(), is_user_member_of_server);
+    // FIXME: Implement admin check when database supports it
+    let is_channel_admin = from_fn_with_state(state.clone(), is_user_member_of_server);
     Router::new()
         .route(
             "/servers/:server_id/channels/:channel_id", 
-            routing::get(get_chat_page).post(send_message).layer(is_member)
+            routing::get(get_chat_page).post(send_message)
         )
+        .route("/servers/:server_id/channels", routing::post(create_channel).layer(is_channel_admin).get(get_chat_page))
+        .route("/servers/:server_id/channels_list", routing::get(get_channels)) .layer(is_member)
 }
 
 async fn is_user_member_of_server(
@@ -95,36 +103,70 @@ async fn send_message(
 
         render_message(msg, user_id)
     } else {
-        fetch_render_chat_page(&state.db, server_id, channel_id, user_id).await
+        fetch_render_chat_page(&state.db, server_id, Some(channel_id), user_id).await
     }
 }
 
 async fn get_chat_page(
     State(state): State<AppState>,
     Auth{ id: user_id }: Auth,
-    Path(ChannelId { channel_id }): Path<ChannelId>,
+    Path(MaybeChannelId { channel_id }): Path<MaybeChannelId>,
     Path(ServerId { server_id }): Path<ServerId>,
 ) -> Markup {
     fetch_render_chat_page(&state.db, server_id, channel_id, user_id).await
 }
 
-async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Uuid, user_id: Uuid) -> Markup {
+async fn get_channels(
+    State(state): State<AppState>,
+    Path(ServerId { server_id }): Path<ServerId>,
+    Path(MaybeChannelId { channel_id }): Path<MaybeChannelId>,
+) -> Markup {
+    fetch_render_channel_list(&state.db, server_id, channel_id).await
+}
+
+
+#[derive(Deserialize)]
+struct NewChannel {
+    name: String
+}
+async fn create_channel(
+    State(state): State<AppState>,
+    Path(ServerId { server_id }): Path<ServerId>,
+    Form(new_channel): Form<NewChannel>,
+) -> impl IntoResponse {
+    let new_id = Uuid::now_v7();
+    let rows_affected = query!(
+        r#"INSERT INTO channels (id, name, server) VALUES ($1, $2, $3)"#,
+        new_id,
+        new_channel.name,
+        server_id,
+    ).execute(&state.db).await.unwrap();
+
+    // TODO: Return a propper error when failing to insert row
+    assert_eq!(rows_affected.rows_affected(), 1);
+
+    (HxResponseTrigger::normal(["close-modal", "get-channel-list"]),render_new_channel_dialog_form(server_id))
+}
+
+async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Option<Uuid>, user_id: Uuid) -> Markup {
     base_tempalte(html!(
         main class="grid max-h-screen grid-rows-1 px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
             (fetch_render_server_list(pool, user_id).await)
             (fetch_render_channel_list(pool, server_id, channel_id).await)
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
-                (fetch_render_message_list(pool, channel_id, user_id).await)
-                form #message-form.flex.items-end.gap-2 
-                    method="POST" 
-                    action=""
-                    hx-post=""
-                    hx-swap="afterbegin"
-                    hx-target="#messages"
-                    "hx-on::after-request"="if (event.detail.successful) this.reset()"
-                {
-                    input.input.input-bordered.grow name="content" placeholder="Type here...";
-                    button.btn.btn-primary { "Send" }
+                @if let Some(active_channel) = channel_id {
+                    (fetch_render_message_list(pool, active_channel, user_id).await)
+                    form #message-form.flex.items-end.gap-2 
+                        method="POST" 
+                        action=""
+                        hx-post=""
+                        hx-swap="afterbegin"
+                        hx-target="#messages"
+                        "hx-on::after-request"="if (event.detail.successful) this.reset()"
+                    {
+                        input.input.input-bordered.grow name="content" placeholder="Type here...";
+                        button.btn.btn-primary { "Send" }
+                    }
                 }
             }
         }
@@ -153,7 +195,7 @@ async fn fetch_render_server_list(pool: &PgPool, user_id: Uuid) -> Markup {
     )
 }
 
-async fn fetch_render_channel_list(pool: &PgPool, server_id: Uuid, channel_id: Uuid) -> Markup {
+async fn fetch_render_channel_list(pool: &PgPool, server_id: Uuid, active_channel: Option<Uuid>) -> Markup {
     let channels = query!(
         r#"SELECT c.id, c.name
     FROM channels AS c
@@ -165,13 +207,52 @@ async fn fetch_render_channel_list(pool: &PgPool, server_id: Uuid, channel_id: U
     .unwrap();
 
     html!(
-        ul.menu.bg-base-200.rounded-box #channels-list {
+        ul #channels-list 
+            class="menu rounded-box bg-base-200" 
+            hx-get={"/servers/"(server_id)"/channels_list"}
+            hx-trigger="get-channel-list from:body" 
+            hx-swap="outerHTML"
+        {
+            li.menu-title {
+                button class="btn btn-ghost btn-sm" onclick="createChannelDialog.showModal()" { "New" }
+            }
             @for channel in channels {
                 li { 
-                    a.active[channel.id == channel_id] 
+                    a.active[active_channel.is_some_and(|id| id == channel.id)] 
                         href={"/servers/"(server_id)"/channels/"(channel.id)} 
                     { (channel.name) } 
                 }
+            }
+        }
+        dialog #createChannelDialog.modal hx-on-close-modal="this.close()" {
+            .modal-box {
+                form method="dialog" {
+                    button class="btn btn-circle btn-ghost btn-sm absolute right-2 top-2" 
+                        type="submit" 
+                        aria-label="close" 
+                        { "✕" }
+                }
+                (render_new_channel_dialog_form(server_id))
+            }
+            form.modal-backdrop method="dialog" {
+                button type="submit" { "Close" }
+            }
+        }
+    )
+}
+
+fn render_new_channel_dialog_form(server_id: Uuid) -> Markup {
+    html!(
+        form method="post" 
+            hx-post={"/servers/"(server_id)"/channels"} 
+            hx-swap="outerHTML"
+        {
+            label class="form-control m-auto w-full max-w-xs" {
+                .label { .label-text { "Channel name" } }
+                input type="text" name="name" class="input input-bordered w-full max-w-xs";
+            }
+            .modal-action {
+                button type="submit" class="btn btn-primary" { "Create" }
             }
         }
     )
