@@ -150,7 +150,7 @@ async fn create_channel(
 
 async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Option<Uuid>, user_id: Uuid) -> Markup {
     base_tempalte(html!(
-        main class="grid max-h-screen grid-rows-1 px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
+        main class="grid max-h-screen min-h-screen grid-rows-1 px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
             (fetch_render_server_list(pool, user_id).await)
             (fetch_render_channel_list(pool, server_id, channel_id).await)
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {

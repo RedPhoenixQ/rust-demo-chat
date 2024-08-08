@@ -1882,10 +1882,6 @@ html {
   display: grid;
 }
 
-.hidden {
-  display: none;
-}
-
 .max-h-screen {
   max-height: 100vh;
   max-height: 100dvh;
@@ -1916,24 +1912,12 @@ html {
   flex-direction: column-reverse;
 }
 
-.place-items-center {
-  place-items: center;
-}
-
 .items-end {
   align-items: flex-end;
 }
 
-.justify-center {
-  justify-content: center;
-}
-
 .gap-2 {
   gap: 0.5rem;
-}
-
-.justify-self-auto {
-  justify-self: auto;
 }
 
 .overflow-y-auto {
