@@ -29,12 +29,12 @@ struct ServerId {
 }
 
 pub fn router(state: AppState) -> Router<AppState> {
-    Router::new().nest(
-        "/channels/:server_id",
-        Router::<AppState>::new()
-            .route("/:channel_id", routing::get(get_chat_page).post(send_message))
-            .route_layer(from_fn_with_state(state.clone(), is_user_member_of_server)),
-    )
+    let is_member = from_fn_with_state(state.clone(), is_user_member_of_server);
+    Router::new()
+        .route(
+            "/channels/:server_id/:channel_id", 
+            routing::get(get_chat_page).post(send_message).layer(is_member)
+        )
 }
 
 const USER_ID: Result<Uuid, uuid::Error> = Uuid::try_parse("01912d47-1aa9-7c51-8537-3c751e5af344");
