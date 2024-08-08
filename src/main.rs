@@ -22,7 +22,7 @@ fn base_tempalte(content: maud::Markup) -> maud::Markup {
                 (HTMX_SCRIPT)
                 link rel="stylesheet" href="/styles.css";
             }
-            body class="min-h-screen" hx-boost {
+            body class="min-h-screen" hx-boost="true" {
                 (content)
             }
         }
