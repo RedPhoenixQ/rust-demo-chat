@@ -1,8 +1,9 @@
-use axum::Router;
+use axum::{response::Redirect, Router};
 use maud::{html, PreEscaped};
 use sqlx::postgres::{PgListener, PgPool};
 use tracing::{info, info_span};
 
+mod auth;
 mod chat;
 mod utils;
 
@@ -61,6 +62,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/hello",
             axum::routing::get(|| async {
                 base_tempalte(maud::html!(span class="btn" {"Hello, World!"}))
+            }),
+        )
+        // FIXME: Create propper auth login handlers
+        .route(
+            "/auth/yeeter",
+            axum::routing::get(|cookies: axum_extra::extract::CookieJar| async {
+                (
+                    cookies.add(
+                        axum_extra::extract::cookie::Cookie::build((
+                            "auth_id",
+                            "01912d47-1aa9-7c51-8537-3c751e5af344",
+                        ))
+                        .path("/")
+                        .http_only(true)
+                        .secure(true),
+                    ),
+                    Redirect::temporary("/hello"),
+                )
+            }),
+        )
+        // FIXME: Create propper auth login handlers
+        .route(
+            "/auth/test",
+            axum::routing::get(|cookies: axum_extra::extract::CookieJar| async {
+                (
+                    cookies.add(
+                        axum_extra::extract::cookie::Cookie::build((
+                            "auth_id",
+                            "019132bf-fac6-7ccf-a673-302ec86fefd7",
+                        ))
+                        .path("/")
+                        .http_only(true)
+                        .secure(true),
+                    ),
+                    Redirect::temporary("/hello"),
+                )
             }),
         )
         .nest("/", chat::router(state.clone()))

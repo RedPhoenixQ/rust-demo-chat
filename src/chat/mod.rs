@@ -8,7 +8,7 @@ use sqlx::{query, query_as, PgPool};
 use time::{format_description::well_known::Rfc3339, PrimitiveDateTime};
 use uuid::Uuid;
 
-use crate::{base_tempalte, utils::MyUuidExt, AppState};
+use crate::{auth::Auth, base_tempalte, utils::MyUuidExt, AppState};
 
 struct Message {
     id: Uuid,
@@ -37,16 +37,16 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
 }
 
-const USER_ID: Result<Uuid, uuid::Error> = Uuid::try_parse("01912d47-1aa9-7c51-8537-3c751e5af344");
 async fn is_user_member_of_server(
     State(state): State<AppState>,
+    Auth{ id: user_id }: Auth,
     Path(ServerId { server_id }): Path<ServerId>,
     request: Request,
     next: Next,
 ) -> impl IntoResponse {
     match sqlx::query!(
         r#"SELECT EXISTS(SELECT * FROM users_member_of_servers WHERE "user" = $1 AND server = $2) as is_member"#,
-        USER_ID.unwrap(),
+        user_id,
         server_id,
     )
     .fetch_one(&state.db).await.unwrap().is_member {
@@ -61,13 +61,13 @@ struct SentMessage {
 }
 async fn send_message(
     State(state): State<AppState>,
+    Auth{ id: user_id }: Auth,
     HxRequest(hx_req): HxRequest,
     HxBoosted(hx_boosted): HxBoosted,
     Path(ChannelId { channel_id }): Path<ChannelId>,
     Path(ServerId { server_id }): Path<ServerId>,
     Form(sent_msg): Form<SentMessage>,
 ) -> Markup {
-    let user_id = USER_ID.unwrap();
     let new_id = Uuid::now_v7();
     let rows_affected = query!(
         r#"INSERT INTO messages (id, content, channel, author) VALUES ($1, $2, $3, $4)"#,
@@ -95,16 +95,17 @@ async fn send_message(
 
         render_message(msg, user_id)
     } else {
-        fetch_render_chat_page(&state.db, server_id, channel_id, USER_ID.unwrap()).await
+        fetch_render_chat_page(&state.db, server_id, channel_id, user_id).await
     }
 }
 
 async fn get_chat_page(
     State(state): State<AppState>,
+    Auth{ id: user_id }: Auth,
     Path(ChannelId { channel_id }): Path<ChannelId>,
     Path(ServerId { server_id }): Path<ServerId>,
 ) -> Markup {
-    fetch_render_chat_page(&state.db, server_id, channel_id, USER_ID.unwrap()).await
+    fetch_render_chat_page(&state.db, server_id, channel_id, user_id).await
 }
 
 async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Uuid, user_id: Uuid) -> Markup {
