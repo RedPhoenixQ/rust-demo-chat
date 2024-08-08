@@ -1,6 +1,6 @@
 use axum::Router;
 use maud::{html, PreEscaped};
-use sqlx::PgPool;
+use sqlx::postgres::{PgListener, PgPool};
 use tracing::{info, info_span};
 
 mod chat;
@@ -40,6 +40,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         db: PgPool::connect_lazy(&std::env::var("DATABASE_URL")?)?,
     };
+
+    let mut listener = PgListener::connect_with(&state.db).await?;
+    tokio::spawn(async move {
+        listener
+            .listen_all(["insert_message", "update_message", "delete_message", "test"])
+            .await
+            .unwrap();
+        while let Ok(notification) = listener.recv().await {
+            info!(
+                channel = notification.channel(),
+                payload = notification.payload(),
+                "Recived notification"
+            );
+        }
+    });
 
     let router = Router::new()
         .route(
