@@ -166,18 +166,11 @@ async fn fetch_render_channel_list(pool: &PgPool, server_id: Uuid, channel_id: U
 
     html!(
         ul.menu.bg-base-200.rounded-box #channels-list {
-            li { 
-                details open {
-                    summary { "Group" }
-                    ul {
-                        @for channel in channels {
-                            li { 
-                                a.active[channel.id == channel_id] 
-                                    href={"/channels/"(server_id)"/"(channel.id)} 
-                                { (channel.name) } 
-                            }
-                        }
-                    }   
+            @for channel in channels {
+                li { 
+                    a.active[channel.id == channel_id] 
+                        href={"/channels/"(server_id)"/"(channel.id)} 
+                    { (channel.name) } 
                 }
             }
         }
