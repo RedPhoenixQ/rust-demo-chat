@@ -54,13 +54,13 @@ async fn is_user_member_of_server(
     next: Next,
 ) -> impl IntoResponse {
     match sqlx::query!(
-        r#"SELECT EXISTS(SELECT * FROM users_member_of_servers WHERE "user" = $1 AND server = $2) as is_member"#,
+        r#"SELECT EXISTS(SELECT * FROM users_member_of_servers WHERE "user" = $1 AND server = $2) as "is_member!""#,
         user_id,
         server_id,
     )
     .fetch_one(&state.db).await.unwrap().is_member {
-        Some(true) => Ok(next.run(request).await),
-        _ => Err(StatusCode::UNAUTHORIZED) 
+        true => Ok(next.run(request).await),
+        false => Err(StatusCode::UNAUTHORIZED) 
     }
 }
 
