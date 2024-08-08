@@ -1874,14 +1874,6 @@ html {
   margin: auto;
 }
 
-.ml-auto {
-  margin-left: auto;
-}
-
-.mr-auto {
-  margin-right: auto;
-}
-
 .flex {
   display: flex;
 }
@@ -1924,10 +1916,6 @@ html {
   align-items: flex-end;
 }
 
-.items-center {
-  align-items: center;
-}
-
 .gap-2 {
   gap: 0.5rem;
 }
@@ -1953,10 +1941,6 @@ html {
 .py-2 {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
-}
-
-.pr-0 {
-  padding-right: 0px;
 }
 
 .text-xs {
@@ -2027,8 +2011,4 @@ html {
 .hover\:btn-error:hover.btn-outline.btn-active {
   --tw-text-opacity: 1;
   color: var(--fallback-erc,oklch(var(--erc)/var(--tw-text-opacity)));
-}
-
-.\[\&\>li\]\:items-center>li {
-  align-items: center;
 }
