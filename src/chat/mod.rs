@@ -94,7 +94,7 @@ async fn send_message(
             r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
         FROM messages AS m
         JOIN chat_users AS u ON u.id = m.author
-        WHERE m.id = $1"#,
+        WHERE m.id = $1 LIMIT 1"#,
             new_id,
         )
         .fetch_one(&state.db)
@@ -264,7 +264,8 @@ async fn fetch_render_message_list(pool: &PgPool, channel_id: Uuid, user_id: Uui
         r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
     FROM messages AS m
     JOIN chat_users AS u ON u.id = m.author
-    WHERE m.channel = $1"#,
+    WHERE m.channel = $1
+    ORDER BY m.id DESC"#,
         channel_id,
     )
     .fetch_all(pool)
@@ -286,6 +287,7 @@ fn render_message(msg: Message, user_id: Uuid) -> Markup {
         li.chat
             .chat-end[is_author]
             .chat-start[!is_author] 
+            data-id=(msg.id)
         {
             .chat-header {
                 (msg.author_name) " "
