@@ -166,7 +166,7 @@ async fn delete_channel(
 
 async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Option<Uuid>, user_id: Uuid) -> Markup {
     let (server_list, channel_list, messages_list) = join!(
-        fetch_render_server_list(pool, user_id),
+        fetch_render_server_list(pool, user_id, server_id),
         fetch_render_channel_list(pool, server_id, channel_id),
         async { Some(fetch_render_message_list(pool, channel_id?, user_id).await) }
     );
@@ -195,7 +195,7 @@ async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Opti
     ))
 }
 
-async fn fetch_render_server_list(pool: &PgPool, user_id: Uuid) -> Markup {
+async fn fetch_render_server_list(pool: &PgPool, user_id: Uuid, active_server: Uuid) -> Markup {
     let servers = query!(
         r#"SELECT s.id, s.name
     FROM servers AS s
@@ -211,7 +211,12 @@ async fn fetch_render_server_list(pool: &PgPool, user_id: Uuid) -> Markup {
     html!(
         ul.menu.bg-base-200.rounded-box #server-list {
             @for server in servers {
-                li { a href={"/servers/"(server.id)"/channels"} { (server.name) } }
+                li { 
+                    a.active[active_server == server.id] 
+                        href={"/servers/"(server.id)"/channels"} { 
+                        (server.name) 
+                    } 
+                }
             }
         }
     )
