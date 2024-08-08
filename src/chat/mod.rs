@@ -39,7 +39,7 @@ pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route(
             "/servers/:server_id/channels/:channel_id", 
-            routing::get(get_chat_page).post(send_message)
+            routing::delete(delete_channel).layer(is_channel_admin.clone()).get(get_chat_page).post(send_message)
         )
         .route("/servers/:server_id/channels", routing::post(create_channel).layer(is_channel_admin).get(get_chat_page))
         .route("/servers/:server_id/channels_list", routing::get(get_channels)) .layer(is_member)
@@ -148,6 +148,21 @@ async fn create_channel(
     (HxResponseTrigger::normal(["close-modal", "get-channel-list"]),render_new_channel_dialog_form(server_id))
 }
 
+async fn delete_channel(
+    State(state): State<AppState>,
+    Path(ChannelId { channel_id  }): Path<ChannelId>,
+) -> impl IntoResponse {
+    let rows_affected = query!(
+        r#"DELETE FROM channels WHERE id = $1"#,
+        channel_id
+    ).execute(&state.db).await.unwrap();
+
+    // TODO: Return a propper error when failing to insert row
+    assert_eq!(rows_affected.rows_affected(), 1);
+
+    html!()
+}
+
 async fn fetch_render_chat_page(pool: &PgPool, server_id: Uuid, channel_id: Option<Uuid>, user_id: Uuid) -> Markup {
     base_tempalte(html!(
         main class="grid max-h-screen min-h-screen grid-rows-1 px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
@@ -218,9 +233,18 @@ async fn fetch_render_channel_list(pool: &PgPool, server_id: Uuid, active_channe
             }
             @for channel in channels {
                 li { 
-                    a.active[active_channel.is_some_and(|id| id == channel.id)] 
-                        href={"/servers/"(server_id)"/channels/"(channel.id)} 
-                    { (channel.name) } 
+                    div.active[active_channel.is_some_and(|id| id == channel.id)].flex {
+                        a.grow href={"/servers/"(server_id)"/channels/"(channel.id)} { 
+                            (channel.name) 
+                        }
+                        button 
+                            class="btn btn-circle btn-ghost btn-sm hover:btn-error"
+                            hx-delete={"/servers/"(server_id)"/channels/"(channel.id)}
+                            hx-confirm={"Are you sure you want to delete '"(channel.name)"'?"}
+                            hx-target="closest li"
+                            hx-swap="outerHTML"
+                            { "✕" }
+                    } 
                 }
             }
         }
