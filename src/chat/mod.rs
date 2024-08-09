@@ -99,10 +99,6 @@ async fn message_event_stream(
         >,
     >,
 > {
-    use axum::response::sse::*;
-    use std::time::Duration;
-    use tokio_stream::wrappers::ReceiverStream;
-
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
@@ -112,14 +108,14 @@ async fn message_event_stream(
         .await
         .map_err(|_| Error::SSEChannelRegistrationChannelFailed)?;
 
-    let stream = ReceiverStream::new(
+    let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(
         rx.await
             .map_err(|_| Error::SSERegistationDidNotRecvChannel)?,
     );
 
-    Ok(Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(Duration::from_secs(5))
+    Ok(axum::response::sse::Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(5))
             .text("heartbeat"),
     ))
 }
@@ -390,23 +386,24 @@ async fn fetch_render_message_list(
         ol #messages class="flex flex-col-reverse overflow-y-auto"
             hx-ext="sse"
             sse-connect={"/servers/"(server_id)"/channels/"(channel_id)"/events"}
-            sse-swap="insert_message"
+            sse-swap="message"
             hx-swap="afterbegin"
         {
             @for msg in &messages {
-                (render_message(msg, &user_id)?)
+                (render_message(msg, &user_id, false)?)
             }
         }
     ))
 }
 
-fn render_message(msg: &Message, user_id: &Uuid) -> Result<Markup> {
+fn render_message(msg: &Message, user_id: &Uuid, swap_oob: bool) -> Result<Markup> {
     let is_author = &msg.author == user_id;
     Ok(html!(
         li.chat
             .chat-end[is_author]
             .chat-start[!is_author]
-            data-id=(msg.id)
+            #{"msg-"(msg.id)}
+            hx-swap-oob=[swap_oob.then_some("true")]
         {
             .chat-header {
                 (msg.author_name) " "

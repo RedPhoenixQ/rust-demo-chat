@@ -1,13 +1,14 @@
 use std::{collections::BTreeMap, convert::Infallible};
 
 use axum::response::sse::Event;
+use maud::html;
 use sqlx::{postgres::PgListener, PgPool};
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, debug_span, error, Instrument};
+use tracing::{debug_span, error, trace, Instrument};
 use uuid::Uuid;
 
 type UserEvent = std::result::Result<Event, Infallible>;
-type UserRegMsg = (Uuid, oneshot::Sender<mpsc::Receiver<UserEvent>>);
+type UserRegMsg = (Uuid, oneshot::Sender<mpsc::UnboundedReceiver<UserEvent>>);
 type ChannelEventMsg = (Uuid, Kind);
 
 #[derive(Debug, Clone)]
@@ -35,41 +36,14 @@ pub async fn create_listener(pool: &PgPool) -> sqlx::Result<MessageRegistry> {
         let mut channel_tasks =
             BTreeMap::<Uuid, (mpsc::Sender<UserRegMsg>, mpsc::Sender<ChannelEventMsg>)>::new();
         loop {
-            const UUID_LEN: usize = 36;
             tokio::select! {
                 notif = listener.recv() => {
                     match notif {
                         Ok(notif) => {
-                            let channel = notif.channel();
                             let payload = notif.payload();
-                            let _span = debug_span!("Message notification", %channel, %payload);
-                            // Payload is exactly 2 Uuid's long
-                            if payload.len() != UUID_LEN*2 {
-                                error!("Payload was not exactly 2 uuids");
-                                continue;
-                            }
-
-                            let kind = match notif.channel() {
-                                "insert_message" => Kind::Insert,
-                                "update_message" => Kind::Update,
-                                "delete_message" => Kind::Delete,
-                                _ => {
-                                    continue;
-                                }
-                            };
-
-                            let (Ok(message_id), Ok(channel_id)) = (Uuid::try_parse(&payload[..UUID_LEN]), Uuid::try_parse(&payload[UUID_LEN..])) else {
-                                error!(message_id = %&payload[..UUID_LEN], channel_id = %&payload[UUID_LEN..], "An id failed to parse");
-                                continue;
-                            };
-                            let _span = debug_span!("Message notification", %channel, %payload);
-                            let Some((_, event_tx)) = channel_tasks.get(&channel_id) else {
-                                debug!("No task exists for the channel");
-                                continue;
-                            };
-                            if let Err(err) = event_tx.send((message_id, kind)).await {
-                                error!(?err, "An error occured when sending message_id to channel task");
-                            };
+                            let channel = notif.channel();
+                            let span = debug_span!("Message notification", %channel, %payload);
+                            handle_notification(channel, payload, &channel_tasks).instrument(span).await;
                         }
                         Err(err) => error!(?err, "Error occured in db listener"),
                     }
@@ -94,23 +68,66 @@ pub async fn create_listener(pool: &PgPool) -> sqlx::Result<MessageRegistry> {
     })
 }
 
+async fn handle_notification(
+    channel: &str,
+    payload: &str,
+    channel_tasks: &BTreeMap<Uuid, (mpsc::Sender<UserRegMsg>, mpsc::Sender<ChannelEventMsg>)>,
+) {
+    const UUID_LEN: usize = 36;
+
+    // Payload is exactly 2 Uuid's long
+    if payload.len() != UUID_LEN * 2 {
+        error!("Payload was not exactly 2 uuids");
+        return;
+    }
+
+    let kind = match channel {
+        "insert_message" => Kind::Insert,
+        "update_message" => Kind::Update,
+        "delete_message" => Kind::Delete,
+        channel => {
+            error!(%channel, "Unexpected channel recived");
+            return;
+        }
+    };
+
+    let (Ok(message_id), Ok(channel_id)) = (
+        Uuid::try_parse(&payload[..UUID_LEN]),
+        Uuid::try_parse(&payload[UUID_LEN..]),
+    ) else {
+        error!(message_id = %&payload[..UUID_LEN], channel_id = %&payload[UUID_LEN..], "An id failed to parse");
+        return;
+    };
+    let Some((_, event_tx)) = channel_tasks.get(&channel_id) else {
+        trace!(%channel_id, "No task exists for the channel");
+        return;
+    };
+    trace!( %message_id, %channel_id,"Sending event to channel handler");
+    if let Err(err) = event_tx.send((message_id, kind)).await {
+        error!(
+            ?err,
+            "An error occured when sending message_id to channel task"
+        );
+    };
+}
+
 fn spawn_channel_task(
     mut register_rx: mpsc::Receiver<UserRegMsg>,
     mut event_rx: mpsc::Receiver<ChannelEventMsg>,
     pool: PgPool,
 ) {
     tokio::spawn(async move {
-        let mut user_senders = BTreeMap::<Uuid, mpsc::Sender<UserEvent>>::new();
+        let mut user_senders = BTreeMap::<Uuid, mpsc::UnboundedSender<UserEvent>>::new();
         loop {
             tokio::select! {
                 Some((message_id, kind)) = event_rx.recv() => {
                     let span = debug_span!("Channel Event Task", %message_id, ?kind);
-                    if let Err(err) = handle_message_event(message_id, kind, user_senders.iter(), &pool).instrument(span).await {
+                    if let Err(err) = handle_message_event(message_id, kind, &mut user_senders, &pool).instrument(span).await {
                         error!(?err, "An error occured while sending events to users")
                     };
                }
                 Some((user_id, sender)) = register_rx.recv() => {
-                    let (tx, rx) = mpsc::channel(1);
+                    let (tx, rx) = mpsc::unbounded_channel();
                     user_senders.insert(user_id, tx);
                     sender.send(rx).expect("Sending sse channel to work");
                 }
@@ -122,11 +139,12 @@ fn spawn_channel_task(
 async fn handle_message_event(
     message_id: Uuid,
     kind: Kind,
-    users: impl Iterator<Item = (&Uuid, &mpsc::Sender<UserEvent>)>,
+    users: &mut BTreeMap<Uuid, mpsc::UnboundedSender<UserEvent>>,
     pool: &PgPool,
 ) -> Result<(), sqlx::Error> {
-    Ok(match kind {
-        Kind::Insert => {
+    let mut stale_sender = Vec::new();
+    match kind {
+        Kind::Insert | Kind::Update => {
             let msg = sqlx::query_as!(
                 super::Message,
                 r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
@@ -139,21 +157,32 @@ async fn handle_message_event(
             .fetch_one(pool)
             .await?;
 
-            for (id, tx) in users {
-                if let Ok(rendered_msg) = super::render_message(&msg, id) {
-                    tx.send(Ok(Event::default()
-                        .event("insert_message")
-                        .data(rendered_msg.0)))
-                        .await
-                        .unwrap();
+            for (id, tx) in users.iter() {
+                if let Ok(rendered_msg) =
+                    super::render_message(&msg, id, matches!(kind, Kind::Update))
+                {
+                    if let Err(_) =
+                        tx.send(Ok(Event::default().event("message").data(rendered_msg.0)))
+                    {
+                        stale_sender.push(id.to_owned());
+                    };
                 }
             }
         }
-        Kind::Update => {
-            error!("Unhandled event recived")
-        }
         Kind::Delete => {
-            error!("Unhandled event recived")
+            for (id, tx) in users.iter() {
+                if let Err(_) = tx.send(Ok(Event::default()
+                    .event("message")
+                    .data(html!(#{"msg-"(message_id)} hx-swap-oob="delete" {}).0)))
+                {
+                    stale_sender.push(id.to_owned());
+                };
+            }
         }
-    })
+    }
+    for id in &stale_sender {
+        trace!(user_id = %id, "Removing stale sender");
+        users.remove(id);
+    }
+    Ok(())
 }
