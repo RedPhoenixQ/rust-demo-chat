@@ -68,7 +68,7 @@ pub fn router(state: AppState) -> Router<AppState> {
                 .get(get_chat_page),
         )
         .route(
-            "/servers/:server_id/channels_list",
+            "/servers/:server_id/channels/list",
             routing::get(get_channels),
         )
         .layer(is_member)
@@ -338,7 +338,7 @@ async fn fetch_render_channel_list(
     Ok(html!(
         ul #channels-list
             class="menu rounded-box bg-base-200"
-            hx-get={"/servers/"(server_id)"/channels_list"}
+            hx-get={"/servers/"(server_id)"/channels/list"}
             hx-trigger="get-channel-list from:body"
             hx-swap="outerHTML"
         {
