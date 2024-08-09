@@ -1912,6 +1912,10 @@ html {
   flex-direction: column-reverse;
 }
 
+.place-items-center {
+  place-items: center;
+}
+
 .items-end {
   align-items: flex-end;
 }
@@ -1943,9 +1947,18 @@ html {
   padding-bottom: 0.5rem;
 }
 
+.text-center {
+  text-align: center;
+}
+
 .text-xs {
   font-size: 0.75rem;
   line-height: 1rem;
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+  line-height: 2rem;
 }
 
 .opacity-50 {
