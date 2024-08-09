@@ -231,7 +231,7 @@ async fn create_channel(
 
     Ok((
         HxResponseTrigger::normal(["close-modal", "get-channel-list"]),
-        render_new_channel_dialog_form(server_id),
+        render_new_channel_form_inners(),
     ))
 }
 
@@ -370,7 +370,9 @@ async fn fetch_render_channel_list(
                         aria-label="close"
                         { "✕" }
                 }
-                (render_new_channel_dialog_form(server_id))
+                form method="post" hx-post={"/servers/"(server_id)"/channels"} {
+                    (render_new_channel_form_inners())
+                }
             }
             form.modal-backdrop method="dialog" {
                 button type="submit" { "Close" }
@@ -379,19 +381,14 @@ async fn fetch_render_channel_list(
     ))
 }
 
-fn render_new_channel_dialog_form(server_id: Uuid) -> Markup {
+fn render_new_channel_form_inners() -> Markup {
     html!(
-        form method="post"
-            hx-post={"/servers/"(server_id)"/channels"}
-            hx-swap="outerHTML"
-        {
-            label class="form-control m-auto w-full max-w-xs" {
-                .label { .label-text { "Channel name" } }
-                input type="text" name="name" class="input input-bordered w-full max-w-xs";
-            }
-            .modal-action {
-                button type="submit" class="btn btn-primary" { "Create" }
-            }
+        label class="form-control m-auto w-full max-w-xs" {
+            .label { .label-text { "Channel name" } }
+            input type="text" name="name" class="input input-bordered w-full max-w-xs";
+        }
+        .modal-action {
+            button type="submit" class="btn btn-primary" { "Create" }
         }
     )
 }
