@@ -13,6 +13,8 @@ const HTMX_SCRIPT: PreEscaped<&str> = PreEscaped(
     #[cfg(not(debug_assertions))]
     r#"<script src="https://unpkg.com/htmx.org@2.0.1" integrity="sha384-QWGpdj554B4ETpJJC9z+ZHJcA/i59TyjxEPXiiUgN2WmTyV5OEZWCD6gQhgkdpB/" crossorigin="anonymous"></script>"#,
 );
+const HTMX_SSE_SCRIPT: PreEscaped<&str> =
+    PreEscaped(r#"<script src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js"></script>"#);
 
 fn base_tempalte(content: maud::Markup) -> maud::Markup {
     html!(
@@ -20,6 +22,7 @@ fn base_tempalte(content: maud::Markup) -> maud::Markup {
         html data-theme="dark" {
             head {
                 (HTMX_SCRIPT)
+                (HTMX_SSE_SCRIPT)
                 link rel="stylesheet" href="/styles.css";
             }
             body class="min-h-screen" hx-boost="true" {
@@ -32,15 +35,16 @@ fn base_tempalte(content: maud::Markup) -> maud::Markup {
 #[derive(Debug, Clone)]
 struct AppState {
     db: PgPool,
+    message_live: chat::live_messages::MessageRegistry,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_tracing()?;
 
-    let state = AppState {
-        db: PgPool::connect_lazy(&std::env::var("DATABASE_URL")?)?,
-    };
+    let db = PgPool::connect_lazy(&std::env::var("DATABASE_URL")?)?;
+    let message_live = chat::live_messages::create_listener(&db).await?;
+    let state = AppState { db, message_live };
 
     let mut listener = PgListener::connect_with(&state.db).await?;
     tokio::spawn(async move {

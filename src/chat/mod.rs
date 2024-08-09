@@ -14,6 +14,7 @@ use tokio::try_join;
 use uuid::Uuid;
 
 mod error;
+pub mod live_messages;
 
 use crate::{auth::Auth, base_tempalte, utils::MyUuidExt, AppState};
 use error::{Error, Result};
@@ -53,6 +54,10 @@ pub fn router(state: AppState) -> Router<AppState> {
                 .post(send_message),
         )
         .route(
+            "/servers/:server_id/channels/:channel_id/events",
+            routing::get(message_event_stream),
+        )
+        .route(
             "/servers/:server_id/channels",
             routing::post(create_channel)
                 .layer(is_channel_admin)
@@ -81,6 +86,42 @@ async fn is_user_member_of_server(
         true => Ok(next.run(request).await),
         false => Ok(StatusCode::UNAUTHORIZED.into_response())
     }
+}
+
+async fn message_event_stream(
+    State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
+    Path(ChannelId { channel_id }): Path<ChannelId>,
+) -> Result<
+    axum::response::sse::Sse<
+        impl tokio_stream::Stream<
+            Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+        >,
+    >,
+> {
+    use axum::response::sse::*;
+    use std::time::Duration;
+    use tokio_stream::wrappers::ReceiverStream;
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+
+    state
+        .message_live
+        .register
+        .send((channel_id, (user_id, tx)))
+        .await
+        .map_err(|_| Error::SSEChannelRegistrationChannelFailed)?;
+
+    let stream = ReceiverStream::new(
+        rx.await
+            .map_err(|_| Error::SSERegistationDidNotRecvChannel)?,
+    );
+
+    Ok(Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(Duration::from_secs(5))
+            .text("heartbeat"),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -112,18 +153,7 @@ async fn send_message(
     }
 
     Ok(if hx_req && !hx_boosted {
-        let msg = query_as!(
-            Message,
-            r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
-        FROM messages AS m
-        JOIN chat_users AS u ON u.id = m.author
-        WHERE m.id = $1 LIMIT 1"#,
-            new_id,
-        )
-        .fetch_one(&state.db)
-        .await?;
-
-        render_message(msg, user_id).into_response()
+        html!().into_response()
     } else {
         fetch_render_chat_page(&state.db, server_id, Some(channel_id), user_id)
             .await
@@ -203,7 +233,7 @@ async fn fetch_render_chat_page(
         fetch_render_channel_list(pool, server_id, channel_id),
         async {
             Ok(if let Some(channel_id) = channel_id {
-                Some(fetch_render_message_list(pool, channel_id, user_id).await?)
+                Some(fetch_render_message_list(pool, server_id, channel_id, user_id).await?)
             } else {
                 None
             })
@@ -221,8 +251,7 @@ async fn fetch_render_chat_page(
                         method="POST"
                         action=""
                         hx-post=""
-                        hx-swap="afterbegin"
-                        hx-target="#messages"
+                        hx-swap="none"
                         "hx-on::after-request"="if (event.detail.successful) this.reset()"
                     {
                         input.input.input-bordered.grow name="content" placeholder="Type here...";
@@ -341,6 +370,7 @@ fn render_new_channel_dialog_form(server_id: Uuid) -> Markup {
 
 async fn fetch_render_message_list(
     pool: &PgPool,
+    server_id: Uuid,
     channel_id: Uuid,
     user_id: Uuid,
 ) -> Result<Markup> {
@@ -357,16 +387,21 @@ async fn fetch_render_message_list(
     .await?;
 
     Ok(html!(
-        ol #messages class="flex flex-col-reverse overflow-y-auto" {
-            @for msg in messages {
-                (render_message(msg, user_id)?)
+        ol #messages class="flex flex-col-reverse overflow-y-auto"
+            hx-ext="sse"
+            sse-connect={"/servers/"(server_id)"/channels/"(channel_id)"/events"}
+            sse-swap="insert_message"
+            hx-swap="afterbegin"
+        {
+            @for msg in &messages {
+                (render_message(msg, &user_id)?)
             }
         }
     ))
 }
 
-fn render_message(msg: Message, user_id: Uuid) -> Result<Markup> {
-    let is_author = msg.author == user_id;
+fn render_message(msg: &Message, user_id: &Uuid) -> Result<Markup> {
+    let is_author = &msg.author == user_id;
     Ok(html!(
         li.chat
             .chat-end[is_author]

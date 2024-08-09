@@ -14,6 +14,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     NoTimestampFromUuid { id: Uuid },
 
+    SSERegistationDidNotRecvChannel,
+    SSEChannelRegistrationChannelFailed,
+
     // Database
     DatabaseActionFailed,
     DB(sqlx::Error),
