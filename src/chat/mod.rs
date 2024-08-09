@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Request, State},
+    extract::{Path, Query, Request, State},
     http::StatusCode,
     middleware::{from_fn_with_state, Next},
     response::IntoResponse,
@@ -52,6 +52,10 @@ pub fn router(state: AppState) -> Router<AppState> {
                 .layer(is_channel_admin.clone())
                 .get(get_chat_page)
                 .post(send_message),
+        )
+        .route(
+            "/servers/:server_id/channels/:channel_id/more_messages",
+            routing::get(get_more_messages),
         )
         .route(
             "/servers/:server_id/channels/:channel_id/events",
@@ -164,6 +168,34 @@ async fn get_chat_page(
     Path(ServerId { server_id }): Path<ServerId>,
 ) -> Result<impl IntoResponse> {
     fetch_render_chat_page(&state.db, server_id, channel_id, user_id).await
+}
+
+#[derive(Deserialize)]
+struct MoreOpts {
+    before: Uuid,
+}
+async fn get_more_messages(
+    State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
+    Query(MoreOpts { before }): Query<MoreOpts>,
+    Path(ChannelId { channel_id }): Path<ChannelId>,
+    Path(ServerId { server_id }): Path<ServerId>,
+) -> Result<impl IntoResponse> {
+    let messages = query_as!(
+        Message,
+        r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
+    FROM messages AS m
+    JOIN chat_users AS u ON u.id = m.author
+    WHERE m.channel = $1 AND m.id < $2
+    ORDER BY m.id DESC
+    LIMIT 25"#,
+        channel_id,
+        before
+    )
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok(render_messages(&messages, server_id, channel_id, user_id)?)
 }
 
 async fn get_channels(
@@ -376,7 +408,8 @@ async fn fetch_render_message_list(
     FROM messages AS m
     JOIN chat_users AS u ON u.id = m.author
     WHERE m.channel = $1
-    ORDER BY m.id DESC"#,
+    ORDER BY m.id DESC
+    LIMIT 25"#,
         channel_id,
     )
     .fetch_all(pool)
@@ -389,9 +422,27 @@ async fn fetch_render_message_list(
             sse-swap="message"
             hx-swap="afterbegin"
         {
-            @for msg in &messages {
-                (render_message(msg, &user_id, false)?)
-            }
+            (render_messages(&messages,server_id, channel_id, user_id)?)
+        }
+    ))
+}
+
+fn render_messages(
+    messages: &[Message],
+    server_id: Uuid,
+    channel_id: Uuid,
+    user_id: Uuid,
+) -> Result<Markup> {
+    Ok(html!(
+        @for msg in messages {
+            (render_message(msg, &user_id, false)?)
+        }
+        @if let Some(last_msg) = messages.last() {
+            div class="loading loading-dots mx-auto mt-auto pt-8"
+                hx-trigger="intersect once"
+                hx-swap="outerHTML"
+                hx-get={"/servers/"(server_id)"/channels/"(channel_id)"/more_messages?before="(last_msg.id)}
+                {}
         }
     ))
 }
