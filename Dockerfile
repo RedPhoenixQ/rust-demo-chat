@@ -10,4 +10,5 @@ RUN apt-get install curl -y
 COPY --from=build /app/target/release/rust-demo-chat /app/main
 COPY assets /app/assets
 EXPOSE 3000
-CMD "/app/main"
+WORKDIR /app
+CMD "./main"
