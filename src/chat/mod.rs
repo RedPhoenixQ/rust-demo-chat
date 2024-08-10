@@ -203,7 +203,7 @@ async fn get_more_messages(
 async fn get_channels(
     State(state): State<AppState>,
     Path(ServerId { server_id }): Path<ServerId>,
-    Path(MaybeChannelId { channel_id }): Path<MaybeChannelId>,
+    Query(MaybeChannelId { channel_id }): Query<MaybeChannelId>,
 ) -> Result<impl IntoResponse> {
     fetch_render_channel_list(&state.db, server_id, channel_id).await
 }
@@ -211,8 +211,9 @@ async fn get_channels(
 async fn get_servers(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
+    Query(MaybeServerId { server_id }): Query<MaybeServerId>,
 ) -> Result<impl IntoResponse> {
-    fetch_render_server_list(&state.db, user_id, Uuid::nil()).await
+    fetch_render_server_list(&state.db, user_id, server_id).await
 }
 
 #[derive(Deserialize)]
@@ -383,7 +384,7 @@ async fn fetch_render_server_list(
     Ok(html!(
         ul #server-list
             class="menu rounded-box bg-base-200"
-            hx-get={"/servers/list"}
+            hx-get={"/servers/list?server_id="(active_server.unwrap_or_default())}
             hx-trigger="get-server-list from:body"
             hx-swap="outerHTML"
         {
@@ -455,7 +456,7 @@ async fn fetch_render_channel_list(
     Ok(html!(
         ul #channels-list
             class="menu rounded-box bg-base-200"
-            hx-get={"/servers/"(server_id)"/channels/list"}
+            hx-get={"/servers/"(server_id)"/channels/list?channel_id="(active_channel.unwrap_or_default())}
             hx-trigger="get-channel-list from:body"
             hx-swap="outerHTML"
         {
