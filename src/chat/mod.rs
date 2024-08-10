@@ -40,6 +40,10 @@ struct MaybeChannelId {
 struct ServerId {
     server_id: Uuid,
 }
+#[derive(Deserialize)]
+struct MaybeServerId {
+    server_id: Option<Uuid>,
+}
 
 pub fn router(state: AppState) -> Router<AppState> {
     let is_member = from_fn_with_state(state.clone(), is_user_member_of_server);
@@ -69,7 +73,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id", routing::delete(delete_server))
         .layer(is_member)
         .route("/servers/list", routing::get(get_servers))
-        .route("/servers", routing::post(create_server))
+        .route("/servers", routing::get(get_chat_page).post(create_server))
 }
 
 async fn is_user_member_of_server(
@@ -153,7 +157,7 @@ async fn send_message(
     Ok(if hx_req && !hx_boosted {
         html!().into_response()
     } else {
-        fetch_render_chat_page(&state.db, server_id, Some(channel_id), user_id)
+        fetch_render_chat_page(&state.db, Some(server_id), Some(channel_id), user_id)
             .await
             .into_response()
     })
@@ -163,7 +167,7 @@ async fn get_chat_page(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     Path(MaybeChannelId { channel_id }): Path<MaybeChannelId>,
-    Path(ServerId { server_id }): Path<ServerId>,
+    Path(MaybeServerId { server_id }): Path<MaybeServerId>,
 ) -> Result<impl IntoResponse> {
     fetch_render_chat_page(&state.db, server_id, channel_id, user_id).await
 }
@@ -312,26 +316,34 @@ async fn delete_server(
 
 async fn fetch_render_chat_page(
     pool: &PgPool,
-    server_id: Uuid,
+    server_id: Option<Uuid>,
     channel_id: Option<Uuid>,
     user_id: Uuid,
 ) -> Result<impl IntoResponse> {
     let (server_list, channel_list, messages_list) = try_join!(
         fetch_render_server_list(pool, user_id, server_id),
-        fetch_render_channel_list(pool, server_id, channel_id),
         async {
-            Ok(if let Some(channel_id) = channel_id {
-                Some(fetch_render_message_list(pool, server_id, channel_id, user_id).await?)
+            Ok(if let Some(server_id) = server_id {
+                Some(fetch_render_channel_list(pool, server_id, channel_id).await?)
             } else {
                 None
             })
+        },
+        async {
+            Ok(
+                if let (Some(server_id), Some(channel_id)) = (server_id, channel_id) {
+                    Some(fetch_render_message_list(pool, server_id, channel_id, user_id).await?)
+                } else {
+                    None
+                },
+            )
         }
     )?;
 
     Ok(base_tempalte(html!(
         main class="grid max-h-screen min-h-screen grid-rows-1 px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
             (server_list)
-            (channel_list)
+            (channel_list.unwrap_or(html!(ul #channels-list {})))
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
                 @if let Some(messages_list) = messages_list {
                     (messages_list)
@@ -354,7 +366,7 @@ async fn fetch_render_chat_page(
 async fn fetch_render_server_list(
     pool: &PgPool,
     user_id: Uuid,
-    active_server: Uuid,
+    active_server: Option<Uuid>,
 ) -> Result<Markup> {
     let servers = query!(
         r#"SELECT s.id, s.name
@@ -380,7 +392,7 @@ async fn fetch_render_server_list(
             }
             @for server in servers {
                 li #{"server-"(server.id)} {
-                    div.active[active_server == server.id].flex {
+                    div.active[active_server.is_some_and(|id| id == server.id)].flex {
                         a.grow href={"/servers/"(server.id)"/channels"} {
                             (server.name)
                         }
