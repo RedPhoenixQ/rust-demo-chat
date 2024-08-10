@@ -91,12 +91,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/",
             axum::routing::get(|| async { base_tempalte(header()) }),
         )
-        .route(
-            "/hello",
-            axum::routing::get(|| async {
-                base_tempalte(maud::html!(span class="btn" {"Hello, World!"}))
-            }),
-        )
         // FIXME: Create propper auth login handlers
         .route(
             "/auth/yeeter",
@@ -111,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .http_only(true)
                         .secure(true),
                     ),
-                    Redirect::temporary("/hello"),
+                    Redirect::temporary("/"),
                 )
             }),
         )
@@ -129,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .http_only(true)
                         .secure(true),
                     ),
-                    Redirect::temporary("/hello"),
+                    Redirect::temporary("/"),
                 )
             }),
         )
