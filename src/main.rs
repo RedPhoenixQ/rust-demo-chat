@@ -25,8 +25,18 @@ fn base_tempalte(content: maud::Markup) -> maud::Markup {
                 (HTMX_SSE_SCRIPT)
                 link rel="stylesheet" href="/styles.css";
             }
-            body class="min-h-screen" hx-boost="true" {
+            body class="min-h-screen" hx-boost="true" hx-on-open-main-modal="mainModal.showModal()" {
                 (content)
+                dialog #mainModal class="modal"
+                    hx-on-close-modal="this.close()"
+                    hx-target="#modalInner"
+                    hx-swap="outerHTML"
+                {
+                    (base_modal(Default::default()))
+                    form.modal-backdrop method="dialog" hx-disable {
+                        button type="submit" { "Close" }
+                    }
+                }
             }
         }
     )
@@ -54,6 +64,20 @@ fn header() -> maud::Markup {
                     }
                 }
             }
+        }
+    )
+}
+
+fn base_modal(content: maud::Markup) -> maud::Markup {
+    maud::html!(
+        #modalInner .modal-box {
+            form method="dialog" hx-disable {
+                button class="btn btn-circle btn-ghost btn-sm absolute right-2 top-2"
+                    type="submit"
+                    aria-label="close"
+                    { "✕" }
+            }
+            (content)
         }
     )
 }

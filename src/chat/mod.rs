@@ -16,7 +16,7 @@ use uuid::Uuid;
 mod error;
 pub mod live_messages;
 
-use crate::{auth::Auth, base_tempalte, header, utils::MyUuidExt, AppState};
+use crate::{auth::Auth, base_modal, base_tempalte, header, utils::MyUuidExt, AppState};
 use error::{Error, Result};
 
 struct Message {
@@ -229,8 +229,29 @@ struct NewChannel {
 async fn create_channel(
     State(state): State<AppState>,
     Path(ServerId { server_id }): Path<ServerId>,
-    Form(new_channel): Form<NewChannel>,
+    new_channel: Option<Form<NewChannel>>,
 ) -> Result<impl IntoResponse> {
+    fn render_new_channel_form_inners(server_id: Uuid) -> Markup {
+        base_modal(html!(
+            form method="post" hx-post={"/servers/"(server_id)"/channels"} {
+                label class="form-control m-auto w-full max-w-xs" {
+                    .label { .label-text { "Channel name" } }
+                    input type="text" name="name" class="input input-bordered w-full max-w-xs";
+                }
+                .modal-action {
+                    button type="submit" class="btn btn-primary" { "Create" }
+                }
+            }
+        ))
+    }
+
+    let Some(Form(new_channel)) = new_channel else {
+        return Ok((
+            HxResponseTrigger::normal(["open-main-modal"]),
+            render_new_channel_form_inners(server_id),
+        ));
+    };
+
     let new_id = Uuid::now_v7();
     let rows_affected = query!(
         r#"INSERT INTO channels (id, name, server) VALUES ($1, $2, $3)"#,
@@ -247,7 +268,7 @@ async fn create_channel(
 
     Ok((
         HxResponseTrigger::normal(["close-modal", "get-channel-list"]),
-        render_new_channel_form_inners(),
+        render_new_channel_form_inners(server_id),
     ))
 }
 
@@ -273,8 +294,29 @@ struct NewServer {
 async fn create_server(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
-    Form(new_server): Form<NewServer>,
+    new_server: Option<Form<NewServer>>,
 ) -> Result<impl IntoResponse> {
+    fn render_new_server_form_inners() -> Markup {
+        base_modal(html!(
+            form method="post" hx-post="/servers" {
+                label class="form-control m-auto w-full max-w-xs" {
+                    .label { .label-text { "Channel name" } }
+                    input type="text" name="name" class="input input-bordered w-full max-w-xs";
+                }
+                .modal-action {
+                    button type="submit" class="btn btn-primary" { "Create" }
+                }
+            }
+        ))
+    }
+
+    let Some(Form(new_server)) = new_server else {
+        return Ok((
+            HxResponseTrigger::normal(["open-main-modal"]),
+            render_new_server_form_inners(),
+        ));
+    };
+
     let mut transaction = state.db.begin().await?;
 
     let new_id = Uuid::now_v7();
@@ -397,7 +439,7 @@ async fn fetch_render_server_list(
             hx-swap="outerHTML"
         {
             li.menu-title {
-                button class="btn btn-ghost btn-sm" onclick="createServerDialog.showModal()" { "New" }
+                button class="btn btn-ghost btn-sm" hx-post="/servers" hx-target="#modalInner" { "New" }
             }
             @for server in servers {
                 li #{"server-"(server.id)} {
@@ -416,35 +458,7 @@ async fn fetch_render_server_list(
                 }
             }
         }
-        dialog #createServerDialog.modal hx-on-close-modal="this.close()" {
-            .modal-box {
-                form method="dialog" hx-disable {
-                    button class="btn btn-circle btn-ghost btn-sm absolute right-2 top-2"
-                        type="submit"
-                        aria-label="close"
-                        { "✕" }
-                }
-                form method="post" hx-post="/servers" {
-                    (render_new_server_form_inners())
-                }
-            }
-            form.modal-backdrop method="dialog" hx-disable {
-                button type="submit" { "Close" }
-            }
-        }
     ))
-}
-
-fn render_new_server_form_inners() -> Markup {
-    html!(
-        label class="form-control m-auto w-full max-w-xs" {
-            .label { .label-text { "Channel name" } }
-            input type="text" name="name" class="input input-bordered w-full max-w-xs";
-        }
-        .modal-action {
-            button type="submit" class="btn btn-primary" { "Create" }
-        }
-    )
 }
 
 async fn fetch_render_channel_list(
@@ -469,7 +483,7 @@ async fn fetch_render_channel_list(
             hx-swap="outerHTML"
         {
             li.menu-title {
-                button class="btn btn-ghost btn-sm" onclick="createChannelDialog.showModal()" { "New" }
+                button class="btn btn-ghost btn-sm" hx-post={"/servers/"(server_id)"/channels"} hx-target="#modalInner" { "New" }
             }
             @for channel in channels {
                 li #{"channel-"(channel.id)} {
@@ -488,35 +502,7 @@ async fn fetch_render_channel_list(
                 }
             }
         }
-        dialog #createChannelDialog.modal hx-on-close-modal="this.close()" {
-            .modal-box {
-                form method="dialog" hx-disable {
-                    button class="btn btn-circle btn-ghost btn-sm absolute right-2 top-2"
-                        type="submit"
-                        aria-label="close"
-                        { "✕" }
-                }
-                form method="post" hx-post={"/servers/"(server_id)"/channels"} {
-                    (render_new_channel_form_inners())
-                }
-            }
-            form.modal-backdrop method="dialog" hx-disable {
-                button type="submit" { "Close" }
-            }
-        }
     ))
-}
-
-fn render_new_channel_form_inners() -> Markup {
-    html!(
-        label class="form-control m-auto w-full max-w-xs" {
-            .label { .label-text { "Channel name" } }
-            input type="text" name="name" class="input input-bordered w-full max-w-xs";
-        }
-        .modal-action {
-            button type="submit" class="btn btn-primary" { "Create" }
-        }
-    )
 }
 
 async fn fetch_render_message_list(
