@@ -1,4 +1,4 @@
-use axum::{response::Redirect, Router};
+use axum::{response::Redirect, routing, Router};
 use maud::{html, PreEscaped};
 use sqlx::postgres::{PgListener, PgPool};
 use tracing::{info, info_span};
@@ -87,6 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let router = Router::new()
+        .route("/api/health", routing::any(|| async { "alive" }))
         .route(
             "/",
             axum::routing::get(|| async { base_tempalte(header()) }),
