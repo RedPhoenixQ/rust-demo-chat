@@ -378,7 +378,7 @@ async fn fetch_render_server_list(
                 button class="btn btn-ghost btn-sm" onclick="createServerDialog.showModal()" { "New" }
             }
             @for server in servers {
-                li {
+                li #{"server-"(server.id)} {
                     div.active[active_server == server.id].flex {
                         a.grow href={"/servers/"(server.id)"/channels"} {
                             (server.name)
@@ -450,7 +450,7 @@ async fn fetch_render_channel_list(
                 button class="btn btn-ghost btn-sm" onclick="createChannelDialog.showModal()" { "New" }
             }
             @for channel in channels {
-                li {
+                li #{"channel-"(channel.id)} {
                     div.active[active_channel.is_some_and(|id| id == channel.id)].flex {
                         a.grow href={"/servers/"(server_id)"/channels/"(channel.id)} {
                             (channel.name)
