@@ -333,7 +333,10 @@ async fn fetch_render_chat_page(
         async {
             Ok(
                 if let (Some(server_id), Some(channel_id)) = (server_id, channel_id) {
-                    Some(fetch_render_message_list(pool, server_id, channel_id, user_id).await?)
+                    Some((
+                        fetch_render_message_list(pool, server_id, channel_id, user_id).await?,
+                        (server_id, channel_id),
+                    ))
                 } else {
                     None
                 },
@@ -347,12 +350,10 @@ async fn fetch_render_chat_page(
             (server_list)
             (channel_list.unwrap_or(html!(ul #channels-list {})))
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
-                @if let Some(messages_list) = messages_list {
+                @if let Some((messages_list, (server_id, channel_id))) = messages_list {
                     (messages_list)
                     form #message-form.flex.items-end.gap-2
-                        method="POST"
-                        action="messages"
-                        hx-post="messages"
+                        hx-post={"/servers/"(server_id)"/"(channel_id)"/messages"}
                         hx-swap="none"
                         "hx-on::after-request"="if (event.detail.successful) this.reset()"
                     {
