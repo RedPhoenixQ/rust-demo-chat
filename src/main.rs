@@ -36,18 +36,19 @@ fn header() -> maud::Markup {
     html!(
         header class="navbar bg-base-100" {
             div class="flex-1" {
-                a class="btn btn-ghost" href="/servers" {
-                    "Servers"
+                a class="btn btn-ghost" href="/" {
+                    "Home"
                 }
             }
             div class="flex-none" {
-                ul class="menu menu-horizontal px-1" {
+                ul class="menu menu-horizontal" {
                     li {
                         details class="z-20" {
                             summary { "Auth" }
                             ul {
                                 li { a href="/auth/test" { "Test" } }
                                 li { a href="/auth/yeeter" { "Yeeter" } }
+                                li { a href="/logout" { "Logout" } }
                             }
                         }
                     }
@@ -88,11 +89,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let router = Router::new()
         .route("/api/health", routing::any(|| async { "alive" }))
-        .route(
-            "/",
-            axum::routing::get(|| async { base_tempalte(header()) }),
-        )
         // FIXME: Create propper auth login handlers
+        .route(
+            "/login",
+            axum::routing::get(|| async {
+                base_tempalte(maud::html!(
+                    (header())
+                    h1 { "Login" }
+                ))
+            }),
+        )
+        .route(
+            "/logout",
+            axum::routing::get(|cookies: axum_extra::extract::CookieJar| async {
+                (
+                    cookies.add(
+                        axum_extra::extract::cookie::Cookie::build("auth_id")
+                            .removal()
+                            .path("/")
+                            .http_only(true)
+                            .secure(true),
+                    ),
+                    Redirect::temporary("/"),
+                )
+            }),
+        )
         .route(
             "/auth/yeeter",
             axum::routing::get(|cookies: axum_extra::extract::CookieJar| async {

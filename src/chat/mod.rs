@@ -46,34 +46,34 @@ struct MaybeServerId {
 }
 
 pub fn router(state: AppState) -> Router<AppState> {
-    let is_member = from_fn_with_state(state.clone(), is_user_member_of_server);
     Router::new()
         .route(
-            "/servers/:server_id/channels/:channel_id",
-            routing::delete(delete_channel)
-                .get(get_chat_page)
-                .post(send_message),
+            "/servers/:server_id/:channel_id/messages",
+            routing::post(send_message),
         )
         .route(
-            "/servers/:server_id/channels/:channel_id/more_messages",
+            "/servers/:server_id/:channel_id/more_messages",
             routing::get(get_more_messages),
         )
         .route(
-            "/servers/:server_id/channels/:channel_id/events",
+            "/servers/:server_id/:channel_id/events",
             routing::get(message_event_stream),
         )
         .route(
-            "/servers/:server_id/channels",
-            routing::post(create_channel).get(get_chat_page),
+            "/servers/:server_id/:channel_id",
+            routing::get(get_chat_page).delete(delete_channel),
         )
         .route(
-            "/servers/:server_id/channels/list",
-            routing::get(get_channels),
+            "/servers/:server_id/channels",
+            routing::get(get_channels).post(create_channel),
         )
-        .route("/servers/:server_id", routing::delete(delete_server))
-        .layer(is_member)
-        .route("/servers/list", routing::get(get_servers))
-        .route("/servers", routing::get(get_chat_page).post(create_server))
+        .route(
+            "/servers/:server_id",
+            routing::get(get_chat_page).delete(delete_server),
+        )
+        .layer(from_fn_with_state(state.clone(), is_user_member_of_server))
+        .route("/servers", routing::get(get_servers).post(create_server))
+        .route("/", routing::get(get_chat_page))
 }
 
 async fn is_user_member_of_server(
@@ -351,8 +351,8 @@ async fn fetch_render_chat_page(
                     (messages_list)
                     form #message-form.flex.items-end.gap-2
                         method="POST"
-                        action=""
-                        hx-post=""
+                        action="messages"
+                        hx-post="messages"
                         hx-swap="none"
                         "hx-on::after-request"="if (event.detail.successful) this.reset()"
                     {
@@ -395,7 +395,7 @@ async fn fetch_render_server_list(
             @for server in servers {
                 li #{"server-"(server.id)} {
                     div.active[active_server.is_some_and(|id| id == server.id)].flex {
-                        a.grow href={"/servers/"(server.id)"/channels"} {
+                        a.grow href={"/servers/"(server.id)} {
                             (server.name)
                         }
                         button
@@ -457,7 +457,7 @@ async fn fetch_render_channel_list(
     Ok(html!(
         ul #channels-list
             class="menu rounded-box bg-base-200"
-            hx-get={"/servers/"(server_id)"/channels/list?channel_id="(active_channel.unwrap_or_default())}
+            hx-get={"/servers/"(server_id)"/list?channel_id="(active_channel.unwrap_or_default())}
             hx-trigger="get-channel-list from:body"
             hx-swap="outerHTML"
         {
@@ -467,12 +467,12 @@ async fn fetch_render_channel_list(
             @for channel in channels {
                 li #{"channel-"(channel.id)} {
                     div.active[active_channel.is_some_and(|id| id == channel.id)].flex {
-                        a.grow href={"/servers/"(server_id)"/channels/"(channel.id)} {
+                        a.grow href={"/servers/"(server_id)"/"(channel.id)} {
                             (channel.name)
                         }
                         button
                             class="btn btn-circle btn-ghost btn-sm hover:btn-error"
-                            hx-delete={"/servers/"(server_id)"/channels/"(channel.id)}
+                            hx-delete={"/servers/"(server_id)"/"(channel.id)}
                             hx-confirm={"Are you sure you want to delete '"(channel.name)"'?"}
                             hx-target="closest li"
                             hx-swap="outerHTML"
@@ -534,7 +534,7 @@ async fn fetch_render_message_list(
     Ok(html!(
         ol #messages class="flex flex-col-reverse overflow-y-auto"
             hx-ext="sse"
-            sse-connect={"/servers/"(server_id)"/channels/"(channel_id)"/events"}
+            sse-connect={"/servers/"(server_id)"/"(channel_id)"/events"}
             sse-swap="message"
             hx-swap="afterbegin"
         {
@@ -557,7 +557,7 @@ fn render_messages(
             div class="loading loading-dots mx-auto mt-auto pt-8"
                 hx-trigger="intersect once"
                 hx-swap="outerHTML"
-                hx-get={"/servers/"(server_id)"/channels/"(channel_id)"/more_messages?before="(last_msg.id)}
+                hx-get={"/servers/"(server_id)"/"(channel_id)"/more_messages?before="(last_msg.id)}
                 {}
         }
     ))
