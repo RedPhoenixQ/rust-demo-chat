@@ -360,7 +360,8 @@ async fn fetch_render_server_list(
         r#"SELECT s.id, s.name
     FROM servers AS s
     WHERE EXISTS (
-        SELECT * FROM users_member_of_servers WHERE "user" = $1
+        SELECT * FROM users_member_of_servers 
+        WHERE "user" = $1 AND server = s.id
     )"#,
         user_id,
     )
