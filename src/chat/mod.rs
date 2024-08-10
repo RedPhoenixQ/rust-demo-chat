@@ -411,7 +411,7 @@ async fn fetch_render_server_list(
         }
         dialog #createServerDialog.modal hx-on-close-modal="this.close()" {
             .modal-box {
-                form method="dialog" {
+                form method="dialog" hx-disable {
                     button class="btn btn-circle btn-ghost btn-sm absolute right-2 top-2"
                         type="submit"
                         aria-label="close"
@@ -421,7 +421,7 @@ async fn fetch_render_server_list(
                     (render_new_server_form_inners())
                 }
             }
-            form.modal-backdrop method="dialog" {
+            form.modal-backdrop method="dialog" hx-disable {
                 button type="submit" { "Close" }
             }
         }
@@ -483,7 +483,7 @@ async fn fetch_render_channel_list(
         }
         dialog #createChannelDialog.modal hx-on-close-modal="this.close()" {
             .modal-box {
-                form method="dialog" {
+                form method="dialog" hx-disable {
                     button class="btn btn-circle btn-ghost btn-sm absolute right-2 top-2"
                         type="submit"
                         aria-label="close"
@@ -493,7 +493,7 @@ async fn fetch_render_channel_list(
                     (render_new_channel_form_inners())
                 }
             }
-            form.modal-backdrop method="dialog" {
+            form.modal-backdrop method="dialog" hx-disable {
                 button type="submit" { "Close" }
             }
         }
