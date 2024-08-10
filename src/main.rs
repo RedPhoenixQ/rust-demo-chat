@@ -88,6 +88,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let router = Router::new()
         .route(
+            "/",
+            axum::routing::get(|| async { base_tempalte(header()) }),
+        )
+        .route(
             "/hello",
             axum::routing::get(|| async {
                 base_tempalte(maud::html!(span class="btn" {"Hello, World!"}))
