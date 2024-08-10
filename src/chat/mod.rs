@@ -392,7 +392,7 @@ async fn fetch_render_server_list(
     Ok(html!(
         ul #server-list
             class="menu rounded-box bg-base-200"
-            hx-get={"/servers/list?server_id="(active_server.unwrap_or_default())}
+            hx-get={"/servers?server_id="(active_server.unwrap_or_default())}
             hx-trigger="get-server-list from:body"
             hx-swap="outerHTML"
         {
@@ -464,7 +464,7 @@ async fn fetch_render_channel_list(
     Ok(html!(
         ul #channels-list
             class="menu rounded-box bg-base-200"
-            hx-get={"/servers/"(server_id)"/list?channel_id="(active_channel.unwrap_or_default())}
+            hx-get={"/servers/"(server_id)"/channels?channel_id="(active_channel.unwrap_or_default())}
             hx-trigger="get-channel-list from:body"
             hx-swap="outerHTML"
         {
