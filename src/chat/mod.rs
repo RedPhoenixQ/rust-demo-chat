@@ -66,7 +66,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             "/servers/:server_id/channels/list",
             routing::get(get_channels),
         )
+        .route("/servers/:server_id", routing::delete(delete_server))
         .layer(is_member)
+        .route("/servers/list", routing::get(get_servers))
+        .route("/servers", routing::post(create_server))
 }
 
 async fn is_user_member_of_server(
@@ -201,6 +204,13 @@ async fn get_channels(
     fetch_render_channel_list(&state.db, server_id, channel_id).await
 }
 
+async fn get_servers(
+    State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
+) -> Result<impl IntoResponse> {
+    fetch_render_server_list(&state.db, user_id, Uuid::nil()).await
+}
+
 #[derive(Deserialize)]
 struct NewChannel {
     name: String,
@@ -235,6 +245,61 @@ async fn delete_channel(
     Path(ChannelId { channel_id }): Path<ChannelId>,
 ) -> Result<impl IntoResponse> {
     let rows_affected = query!(r#"DELETE FROM channels WHERE id = $1"#, channel_id)
+        .execute(&state.db)
+        .await?;
+
+    if rows_affected.rows_affected() != 1 {
+        return Err(Error::DatabaseActionFailed);
+    }
+
+    Ok(html!())
+}
+
+#[derive(Deserialize)]
+struct NewServer {
+    name: String,
+}
+async fn create_server(
+    State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
+    Form(new_server): Form<NewServer>,
+) -> Result<impl IntoResponse> {
+    let mut transaction = state.db.begin().await?;
+
+    let new_id = Uuid::now_v7();
+    let rows_affected = query!(
+        r#"INSERT INTO servers (id, name) VALUES ($1, $2)"#,
+        new_id,
+        new_server.name,
+    )
+    .execute(&mut *transaction)
+    .await?;
+    if rows_affected.rows_affected() != 1 {
+        return Err(Error::DatabaseActionFailed);
+    }
+    let rows_affected = query!(
+        r#"INSERT INTO users_member_of_servers ("user", server) VALUES ($1, $2)"#,
+        user_id,
+        new_id,
+    )
+    .execute(&mut *transaction)
+    .await?;
+    if rows_affected.rows_affected() != 1 {
+        return Err(Error::DatabaseActionFailed);
+    }
+    transaction.commit().await?;
+
+    Ok((
+        HxResponseTrigger::normal(["close-modal", "get-server-list"]),
+        render_new_server_form_inners(),
+    ))
+}
+
+async fn delete_server(
+    State(state): State<AppState>,
+    Path(ServerId { server_id }): Path<ServerId>,
+) -> Result<impl IntoResponse> {
+    let rows_affected = query!(r#"DELETE FROM servers WHERE id = $1"#, server_id)
         .execute(&state.db)
         .await?;
 
@@ -303,17 +368,61 @@ async fn fetch_render_server_list(
     .await?;
 
     Ok(html!(
-        ul.menu.bg-base-200.rounded-box #server-list {
+        ul #server-list
+            class="menu rounded-box bg-base-200"
+            hx-get={"/servers/list"}
+            hx-trigger="get-server-list from:body"
+            hx-swap="outerHTML"
+        {
+            li.menu-title {
+                button class="btn btn-ghost btn-sm" onclick="createServerDialog.showModal()" { "New" }
+            }
             @for server in servers {
                 li {
-                    a.active[active_server == server.id]
-                        href={"/servers/"(server.id)"/channels"} {
-                        (server.name)
+                    div.active[active_server == server.id].flex {
+                        a.grow href={"/servers/"(server.id)"/channels"} {
+                            (server.name)
+                        }
+                        button
+                            class="btn btn-circle btn-ghost btn-sm hover:btn-error"
+                            hx-delete={"/servers/"(server.id)}
+                            hx-confirm={"Are you sure you want to delete '"(server.name)"'?"}
+                            hx-target="closest li"
+                            hx-swap="outerHTML"
+                            { "✕" }
                     }
                 }
             }
         }
+        dialog #createServerDialog.modal hx-on-close-modal="this.close()" {
+            .modal-box {
+                form method="dialog" {
+                    button class="btn btn-circle btn-ghost btn-sm absolute right-2 top-2"
+                        type="submit"
+                        aria-label="close"
+                        { "✕" }
+                }
+                form method="post" hx-post="/servers" {
+                    (render_new_server_form_inners())
+                }
+            }
+            form.modal-backdrop method="dialog" {
+                button type="submit" { "Close" }
+            }
+        }
     ))
+}
+
+fn render_new_server_form_inners() -> Markup {
+    html!(
+        label class="form-control m-auto w-full max-w-xs" {
+            .label { .label-text { "Channel name" } }
+            input type="text" name="name" class="input input-bordered w-full max-w-xs";
+        }
+        .modal-action {
+            button type="submit" class="btn btn-primary" { "Create" }
+        }
+    )
 }
 
 async fn fetch_render_channel_list(
