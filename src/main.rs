@@ -32,6 +32,31 @@ fn base_tempalte(content: maud::Markup) -> maud::Markup {
     )
 }
 
+fn header() -> maud::Markup {
+    html!(
+        header class="navbar bg-base-100" {
+            div class="flex-1" {
+                a class="btn btn-ghost" href="/servers" {
+                    "Servers"
+                }
+            }
+            div class="flex-none" {
+                ul class="menu menu-horizontal px-1" {
+                    li {
+                        details class="z-20" {
+                            summary { "Auth" }
+                            ul {
+                                li { a href="/auth/test" { "Test" } }
+                                li { a href="/auth/yeeter" { "Yeeter" } }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
 #[derive(Debug, Clone)]
 struct AppState {
     db: PgPool,

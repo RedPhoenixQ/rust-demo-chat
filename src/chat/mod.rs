@@ -16,7 +16,7 @@ use uuid::Uuid;
 mod error;
 pub mod live_messages;
 
-use crate::{auth::Auth, base_tempalte, utils::MyUuidExt, AppState};
+use crate::{auth::Auth, base_tempalte, header, utils::MyUuidExt, AppState};
 use error::{Error, Result};
 
 struct Message {
@@ -342,7 +342,8 @@ async fn fetch_render_chat_page(
     )?;
 
     Ok(base_tempalte(html!(
-        main class="grid max-h-screen min-h-screen grid-rows-1 px-4 py-2" style="grid-template-columns: auto auto 1fr;" {
+        main class="grid max-h-screen min-h-screen px-4 py-2" style="grid-template-columns: auto auto 1fr; grid-template-rows: auto minmax(0,1fr)" {
+            .col-span-full { (header()) }
             (server_list)
             (channel_list.unwrap_or(html!(ul #channels-list {})))
             #chat-wrapper.grid style="grid-template-rows: 1fr auto" {
