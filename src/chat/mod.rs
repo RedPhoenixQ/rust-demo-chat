@@ -43,13 +43,10 @@ struct ServerId {
 
 pub fn router(state: AppState) -> Router<AppState> {
     let is_member = from_fn_with_state(state.clone(), is_user_member_of_server);
-    // FIXME: Implement admin check when database supports it
-    let is_channel_admin = from_fn_with_state(state.clone(), is_user_member_of_server);
     Router::new()
         .route(
             "/servers/:server_id/channels/:channel_id",
             routing::delete(delete_channel)
-                .layer(is_channel_admin.clone())
                 .get(get_chat_page)
                 .post(send_message),
         )
@@ -63,9 +60,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
         .route(
             "/servers/:server_id/channels",
-            routing::post(create_channel)
-                .layer(is_channel_admin)
-                .get(get_chat_page),
+            routing::post(create_channel).get(get_chat_page),
         )
         .route(
             "/servers/:server_id/channels/list",
