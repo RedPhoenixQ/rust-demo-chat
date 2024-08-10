@@ -197,7 +197,13 @@ async fn get_more_messages(
     .fetch_all(&state.db)
     .await?;
 
-    Ok(render_messages(&messages, server_id, channel_id, user_id)?)
+    Ok(render_messages(
+        &messages,
+        server_id,
+        channel_id,
+        user_id,
+        messages.len() >= 25,
+    )?)
 }
 
 async fn get_channels(
@@ -539,7 +545,7 @@ async fn fetch_render_message_list(
             sse-swap="message"
             hx-swap="afterbegin"
         {
-            (render_messages(&messages,server_id, channel_id, user_id)?)
+            (render_messages(&messages,server_id, channel_id, user_id, messages.len() >= 25)?)
         }
     ))
 }
@@ -549,17 +555,20 @@ fn render_messages(
     server_id: Uuid,
     channel_id: Uuid,
     user_id: Uuid,
+    should_load_more: bool,
 ) -> Result<Markup> {
     Ok(html!(
         @for msg in messages {
             (render_message(msg, &user_id, false)?)
         }
         @if let Some(last_msg) = messages.last() {
-            div class="loading loading-dots mx-auto mt-auto pt-8"
-                hx-trigger="intersect once"
-                hx-swap="outerHTML"
-                hx-get={"/servers/"(server_id)"/"(channel_id)"/more_messages?before="(last_msg.id)}
-                {}
+            @if should_load_more {
+                div class="loading loading-dots mx-auto mt-auto pt-8"
+                    hx-trigger="intersect once"
+                    hx-swap="outerHTML"
+                    hx-get={"/servers/"(server_id)"/"(channel_id)"/more_messages?before="(last_msg.id)}
+                    {}
+            }
         }
     ))
 }
