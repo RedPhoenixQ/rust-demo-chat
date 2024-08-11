@@ -7,6 +7,8 @@ use tokio::sync::{mpsc, oneshot};
 use tracing::{debug_span, error, trace, Instrument};
 use uuid::Uuid;
 
+use super::{render_message, Message};
+
 type UserEvent = std::result::Result<Event, Infallible>;
 type UserRegMsg = (Uuid, oneshot::Sender<mpsc::UnboundedReceiver<UserEvent>>);
 type ChannelEventMsg = (Uuid, Kind);
@@ -146,7 +148,7 @@ async fn handle_message_event(
     match kind {
         Kind::Insert | Kind::Update => {
             let msg = sqlx::query_as!(
-                super::messages::Message,
+                Message,
                 r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
             FROM messages AS m
             JOIN chat_users AS u ON u.id = m.author
@@ -158,9 +160,7 @@ async fn handle_message_event(
             .await?;
 
             for (id, tx) in users.iter() {
-                if let Ok(rendered_msg) =
-                    super::messages::render_message(&msg, id, matches!(kind, Kind::Update))
-                {
+                if let Ok(rendered_msg) = render_message(&msg, id, matches!(kind, Kind::Update)) {
                     if tx
                         .send(Ok(Event::default().event("message").data(rendered_msg.0)))
                         .is_err()

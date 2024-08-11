@@ -1,6 +1,69 @@
-use super::*;
+use axum::{
+    extract::{Path, Query, Request, State},
+    http::StatusCode,
+    middleware::{from_fn_with_state, Next},
+    response::IntoResponse,
+    routing, Form, Router,
+};
+use axum_htmx::HxResponseTrigger;
+use maud::{html, Markup};
+use serde::Deserialize;
+use sqlx::{query, PgPool};
+use uuid::Uuid;
 
-pub mod settings;
+use crate::{
+    auth::Auth,
+    base_modal,
+    chat::get_chat_page,
+    error::{Error, Result},
+    AppState,
+};
+
+pub mod channels;
+mod settings;
+
+#[derive(Deserialize)]
+pub struct ServerId {
+    pub server_id: Uuid,
+}
+#[derive(Deserialize)]
+pub struct MaybeServerId {
+    pub server_id: Option<Uuid>,
+}
+
+pub fn router(state: AppState) -> Router<AppState> {
+    Router::new()
+        .nest("/:server_id/channels", channels::router())
+        .route(
+            "/:server_id",
+            routing::get(get_chat_page).delete(delete_server),
+        )
+        .layer(from_fn_with_state(state.clone(), is_user_member_of_server))
+        .nest(
+            "/:server_id/settings",
+            // NOTE: Does not need member check because it check edit rights
+            settings::router(state.clone()),
+        )
+        .route("/", routing::get(get_servers).post(create_server))
+}
+
+async fn is_user_member_of_server(
+    State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
+    Path(ServerId { server_id }): Path<ServerId>,
+    request: Request,
+    next: Next,
+) -> Result<impl IntoResponse> {
+    match query!(
+        r#"SELECT EXISTS(SELECT * FROM users_member_of_servers WHERE "user" = $1 AND server = $2) as "is_member!""#,
+        user_id,
+        server_id,
+    )
+    .fetch_one(&state.db).await?.is_member {
+        true => Ok(next.run(request).await),
+        false => Ok(StatusCode::UNAUTHORIZED.into_response())
+    }
+}
 
 #[derive(Deserialize)]
 pub struct NewServer {

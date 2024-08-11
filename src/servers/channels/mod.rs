@@ -1,4 +1,43 @@
-use super::*;
+use axum::{
+    extract::{Path, Query, State},
+    response::IntoResponse,
+    routing, Form, Router,
+};
+use axum_htmx::HxResponseTrigger;
+use maud::{html, Markup};
+use serde::Deserialize;
+use sqlx::{query, PgPool};
+use uuid::Uuid;
+
+use crate::{
+    base_modal,
+    chat::get_chat_page,
+    error::{Error, Result},
+    AppState,
+};
+
+use super::ServerId;
+
+pub mod messages;
+
+#[derive(Deserialize)]
+pub struct ChannelId {
+    pub channel_id: Uuid,
+}
+#[derive(Deserialize)]
+pub struct MaybeChannelId {
+    pub channel_id: Option<Uuid>,
+}
+
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .nest("/:channel_id/messages", messages::router())
+        .route(
+            "/:channel_id",
+            routing::get(get_chat_page).delete(delete_channel),
+        )
+        .route("/", routing::get(get_channels).post(create_channel))
+}
 
 #[derive(Deserialize)]
 pub struct NewChannel {
@@ -99,12 +138,12 @@ pub async fn fetch_render_channel_list(
             @for channel in channels {
                 li #{"channel-"(channel.id)} {
                     div.active[active_channel.is_some_and(|id| id == channel.id)].flex {
-                        a.grow href={"/servers/"(server_id)"/"(channel.id)} {
+                        a.grow href={"/servers/"(server_id)"/channels/"(channel.id)} {
                             (channel.name)
                         }
                         button
                             class="btn btn-circle btn-ghost btn-sm hover:btn-error"
-                            hx-delete={"/servers/"(server_id)"/"(channel.id)}
+                            hx-delete={"/servers/"(server_id)"/channels/"(channel.id)}
                             hx-confirm={"Are you sure you want to delete '"(channel.name)"'?"}
                             hx-target="closest li"
                             hx-swap="outerHTML"

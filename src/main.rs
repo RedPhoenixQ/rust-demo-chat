@@ -5,7 +5,11 @@ use tracing::{info, info_span};
 
 mod auth;
 mod chat;
+mod error;
+mod servers;
 mod utils;
+
+use servers::channels::messages;
 
 const HTMX_SCRIPT: PreEscaped<&str> = PreEscaped(
     #[cfg(debug_assertions)]
@@ -85,7 +89,7 @@ fn base_modal(content: maud::Markup) -> maud::Markup {
 #[derive(Debug, Clone)]
 struct AppState {
     db: PgPool,
-    message_live: chat::MessageRegistry,
+    message_live: messages::live::MessageRegistry,
 }
 
 #[tokio::main]
@@ -93,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_tracing()?;
 
     let db = PgPool::connect_lazy(&std::env::var("DATABASE_URL")?)?;
-    let message_live = chat::create_listener(&db).await?;
+    let message_live = messages::live::create_listener(&db).await?;
     let state = AppState { db, message_live };
 
     let mut listener = PgListener::connect_with(&state.db).await?;
@@ -173,7 +177,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
             }),
         )
-        .nest("/", chat::router(state.clone()))
+        .nest("/servers", servers::router(state.clone()))
+        .route("/", routing::get(chat::get_chat_page))
         .fallback_service(tower_http::services::ServeDir::new("assets"))
         .layer(
             tower_http::trace::TraceLayer::new_for_http().make_span_with(

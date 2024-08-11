@@ -1,10 +1,29 @@
-use super::*;
-use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::{
+    extract::{Path, Query, State},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+    },
+    routing, Form, Router,
+};
+use maud::{html, Markup};
+use serde::Deserialize;
+use sqlx::{query, query_as, PgPool};
 use std::convert::Infallible;
+use time::{format_description::well_known::Rfc3339, PrimitiveDateTime};
+use uuid::Uuid;
 
-mod live;
+pub mod live;
 
-pub use live::{create_listener, MessageRegistry};
+use crate::{
+    auth::Auth,
+    error::{Error, Result},
+    servers::ServerId,
+    utils::MyUuidExt,
+    AppState,
+};
+
+use super::ChannelId;
 
 struct Message {
     id: Uuid,
@@ -12,6 +31,13 @@ struct Message {
     updated: PrimitiveDateTime,
     author: Uuid,
     author_name: String,
+}
+
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/", routing::post(send_message))
+        .route("/more", routing::get(get_more_messages))
+        .route("/events", routing::get(message_event_stream))
 }
 
 pub async fn message_event_stream(
@@ -47,10 +73,7 @@ pub struct SentMessage {
 pub async fn send_message(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
-    HxRequest(hx_req): HxRequest,
-    HxBoosted(hx_boosted): HxBoosted,
     Path(ChannelId { channel_id }): Path<ChannelId>,
-    Path(ServerId { server_id }): Path<ServerId>,
     Form(sent_msg): Form<SentMessage>,
 ) -> Result<impl IntoResponse> {
     let new_id = Uuid::now_v7();
@@ -68,13 +91,7 @@ pub async fn send_message(
         return Err(Error::DatabaseActionFailed);
     }
 
-    Ok(if hx_req && !hx_boosted {
-        html!().into_response()
-    } else {
-        fetch_render_chat_page(&state.db, Some(server_id), Some(channel_id), user_id)
-            .await
-            .into_response()
-    })
+    Ok(html!())
 }
 
 #[derive(Deserialize)]
@@ -133,7 +150,7 @@ pub async fn fetch_render_message_list(
     Ok(html!(
         ol #messages class="flex flex-col-reverse overflow-y-auto"
             hx-ext="sse"
-            sse-connect={"/servers/"(server_id)"/"(channel_id)"/events"}
+            sse-connect={"/servers/"(server_id)"/channels/"(channel_id)"/messages/events"}
             sse-swap="message"
             hx-swap="afterbegin"
         {
@@ -158,7 +175,7 @@ fn render_messages(
                 div class="loading loading-dots mx-auto mt-auto pt-8"
                     hx-trigger="intersect once"
                     hx-swap="outerHTML"
-                    hx-get={"/servers/"(server_id)"/"(channel_id)"/more_messages?before="(last_msg.id)}
+                    hx-get={"/servers/"(server_id)"/channels/"(channel_id)"/messages/more?before="(last_msg.id)}
                     {}
             }
         }
