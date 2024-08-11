@@ -102,13 +102,13 @@ pub async fn get_more_messages(
     .fetch_all(&state.db)
     .await?;
 
-    Ok(render_messages(
+    render_messages(
         &messages,
         server_id,
         channel_id,
         user_id,
         messages.len() >= 25,
-    )?)
+    )
 }
 
 pub async fn fetch_render_message_list(

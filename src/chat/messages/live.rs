@@ -161,8 +161,9 @@ async fn handle_message_event(
                 if let Ok(rendered_msg) =
                     super::messages::render_message(&msg, id, matches!(kind, Kind::Update))
                 {
-                    if let Err(_) =
-                        tx.send(Ok(Event::default().event("message").data(rendered_msg.0)))
+                    if tx
+                        .send(Ok(Event::default().event("message").data(rendered_msg.0)))
+                        .is_err()
                     {
                         stale_sender.push(id.to_owned());
                     };
@@ -171,9 +172,11 @@ async fn handle_message_event(
         }
         Kind::Delete => {
             for (id, tx) in users.iter() {
-                if let Err(_) = tx.send(Ok(Event::default()
-                    .event("message")
-                    .data(html!(#{"msg-"(message_id)} hx-swap-oob="delete" {}).0)))
+                if tx
+                    .send(Ok(Event::default()
+                        .event("message")
+                        .data(html!(#{"msg-"(message_id)} hx-swap-oob="delete" {}).0)))
+                    .is_err()
                 {
                     stale_sender.push(id.to_owned());
                 };
