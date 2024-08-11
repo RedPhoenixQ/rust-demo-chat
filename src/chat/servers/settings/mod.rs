@@ -1,6 +1,7 @@
 use super::*;
 
 mod general;
+mod members;
 
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
@@ -10,10 +11,13 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
         .route(
             "/members",
-            routing::get(|Path(ServerId { server_id }): Path<ServerId>| async move {
-                base_modal(render_settings_nav(server_id, SettingsTab::Members))
-            }),
+            routing::get(members::open_member_page).post(members::add_member),
         )
+        .route(
+            "/members/:member_id",
+            routing::delete(members::remove_member),
+        )
+        .route("/members/table", routing::get(members::get_member_table))
         .layer(from_fn_with_state(state.clone(), is_allowed_to_edit_server))
 }
 
