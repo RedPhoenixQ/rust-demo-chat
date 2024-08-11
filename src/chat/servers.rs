@@ -1,5 +1,7 @@
 use super::*;
 
+pub mod settings;
+
 #[derive(Deserialize)]
 pub struct NewServer {
     name: String,
@@ -116,13 +118,7 @@ pub async fn fetch_render_server_list(
                         a.grow href={"/servers/"(server.id)} {
                             (server.name)
                         }
-                        button
-                            class="btn btn-circle btn-ghost btn-sm hover:btn-error"
-                            hx-delete={"/servers/"(server.id)}
-                            hx-confirm={"Are you sure you want to delete '"(server.name)"'?"}
-                            hx-target="closest li"
-                            hx-swap="outerHTML"
-                            { "✕" }
+                        button class="btn btn-circle btn-ghost btn-sm" hx-get={"/servers/"(server.id)"/settings"} hx-target="#modalInner" { "..." }
                     }
                 }
             }

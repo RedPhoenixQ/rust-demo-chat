@@ -68,6 +68,11 @@ pub fn router(state: AppState) -> Router<AppState> {
             routing::get(get_chat_page).delete(servers::delete_server),
         )
         .layer(from_fn_with_state(state.clone(), is_user_member_of_server))
+        .nest(
+            "/servers/:server_id/settings",
+            // NOTE: Does not need member check because it check edit rights
+            servers::settings::router(state.clone()),
+        )
         .route(
             "/servers",
             routing::get(servers::get_servers).post(servers::create_server),
