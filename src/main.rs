@@ -85,7 +85,7 @@ fn base_modal(content: maud::Markup) -> maud::Markup {
 #[derive(Debug, Clone)]
 struct AppState {
     db: PgPool,
-    message_live: chat::live_messages::MessageRegistry,
+    message_live: chat::MessageRegistry,
 }
 
 #[tokio::main]
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_tracing()?;
 
     let db = PgPool::connect_lazy(&std::env::var("DATABASE_URL")?)?;
-    let message_live = chat::live_messages::create_listener(&db).await?;
+    let message_live = chat::create_listener(&db).await?;
     let state = AppState { db, message_live };
 
     let mut listener = PgListener::connect_with(&state.db).await?;

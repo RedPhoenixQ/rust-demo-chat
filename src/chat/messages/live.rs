@@ -146,7 +146,7 @@ async fn handle_message_event(
     match kind {
         Kind::Insert | Kind::Update => {
             let msg = sqlx::query_as!(
-                super::Message,
+                super::messages::Message,
                 r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
             FROM messages AS m
             JOIN chat_users AS u ON u.id = m.author
@@ -159,7 +159,7 @@ async fn handle_message_event(
 
             for (id, tx) in users.iter() {
                 if let Ok(rendered_msg) =
-                    super::render_message(&msg, id, matches!(kind, Kind::Update))
+                    super::messages::render_message(&msg, id, matches!(kind, Kind::Update))
                 {
                     if let Err(_) =
                         tx.send(Ok(Event::default().event("message").data(rendered_msg.0)))
