@@ -6,16 +6,21 @@ pub struct MemberId {
 }
 
 pub async fn open_member_page(
-    state: State<AppState>,
-    server_id: Path<ServerId>,
+    State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
+    Path(ServerId { server_id }): Path<ServerId>,
 ) -> Result<impl IntoResponse> {
     Ok((
         HxResponseTrigger::normal(["open-main-modal"]),
-        fetch_render_members_page(&state.0.db, server_id.0.server_id).await?,
+        fetch_render_members_page(&state.db, server_id, user_id).await?,
     ))
 }
-async fn fetch_render_members_page(pool: &PgPool, server_id: Uuid) -> Result<Markup> {
-    let member_table = fetch_render_member_table(pool, server_id).await?;
+async fn fetch_render_members_page(
+    pool: &PgPool,
+    server_id: Uuid,
+    user_id: Uuid,
+) -> Result<Markup> {
+    let member_table = fetch_render_member_table(pool, server_id, user_id).await?;
 
     Ok(base_modal(html! {
         (render_settings_nav(server_id, SettingsTab::Members))
@@ -95,11 +100,16 @@ fn render_add_member_form(server_id: Uuid) -> Markup {
 
 pub async fn get_member_table(
     State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
     Path(ServerId { server_id }): Path<ServerId>,
 ) -> impl IntoResponse {
-    fetch_render_member_table(&state.db, server_id).await
+    fetch_render_member_table(&state.db, server_id, user_id).await
 }
-async fn fetch_render_member_table(pool: &PgPool, server_id: Uuid) -> Result<Markup> {
+async fn fetch_render_member_table(
+    pool: &PgPool,
+    server_id: Uuid,
+    user_id: Uuid,
+) -> Result<Markup> {
     let members = query!(
         r#"SELECT u.id, u.name 
     FROM chat_users as u
@@ -130,10 +140,14 @@ async fn fetch_render_member_table(pool: &PgPool, server_id: Uuid) -> Result<Mar
                     tr {
                         td { (member.name) }
                         td {
-                            button class="link link-error"
-                                hx-delete={"/servers/"(server_id)"/settings/members/"(member.id)}
-                                hx-target="closest tr"
-                                { "Remove" }
+                            @if member.id != user_id {
+                                button class="link link-error"
+                                    hx-delete={"/servers/"(server_id)"/settings/members/"(member.id)}
+                                    hx-target="closest tr"
+                                    { "Remove" }
+                            } @else {
+                                .italic.opacity-50 { "You" }
+                            }
                         }
                     }
                 }
