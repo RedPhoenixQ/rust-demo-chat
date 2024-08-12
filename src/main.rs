@@ -7,6 +7,7 @@ mod auth;
 mod chat;
 mod error;
 mod servers;
+mod users;
 mod utils;
 
 use servers::channels::messages;
@@ -67,6 +68,9 @@ fn header() -> maud::Markup {
                         }
                     }
                 }
+            }
+            div class="flex-none" {
+                button class="btn"  hx-get="/users/profile" hx-target="#modalInner" hx-swap="outerHTML" { "Profile" }
             }
         }
     )
@@ -178,6 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         )
         .nest("/servers", servers::router(state.clone()))
+        .nest("/users", users::router())
         .route("/", routing::get(chat::get_chat_page))
         .fallback_service(tower_http::services::ServeDir::new("assets"))
         .layer(
