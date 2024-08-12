@@ -20,9 +20,6 @@ pub enum Error {
     // Database
     DatabaseActionFailed,
     DB(sqlx::Error),
-
-    // time crate
-    Time(time::Error),
 }
 
 impl std::error::Error for Error {}
@@ -56,11 +53,5 @@ impl IntoResponse for Error {
 impl From<sqlx::Error> for Error {
     fn from(value: sqlx::Error) -> Self {
         Error::DB(value)
-    }
-}
-
-impl From<time::error::Format> for Error {
-    fn from(err: time::error::Format) -> Self {
-        Error::Time(err.into())
     }
 }

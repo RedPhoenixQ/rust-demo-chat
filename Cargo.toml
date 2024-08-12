@@ -7,15 +7,15 @@ edition = "2021"
 axum = { version = "0.7.5", features = ["form", "tracing"] }
 axum-extra = { version = "0.9.3", features = ["cookie", "typed-header"] }
 axum-htmx = "0.6.0"
+chrono = "0.4.38"
 maud = { version = "0.26.0", features = ["axum"] }
 serde = { version = "1.0.204", features = ["derive"] }
 sqlx = { version = "0.8.0", features = [
   "postgres",
   "runtime-tokio",
-  "time",
+  "chrono",
   "uuid",
 ] }
-time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.39.2", features = ["rt-multi-thread"] }
 tokio-stream = "0.1.15"
 tower-http = { version = "0.5.2", features = ["fs", "trace"] }

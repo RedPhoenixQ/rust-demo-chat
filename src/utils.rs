@@ -1,15 +1,15 @@
-use time::{Duration, OffsetDateTime};
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 pub trait MyUuidExt {
-    fn get_datetime(&self) -> Option<OffsetDateTime>;
+    fn get_datetime(&self) -> Option<DateTime<Utc>>;
 }
 
 impl MyUuidExt for Uuid {
-    fn get_datetime(&self) -> Option<OffsetDateTime> {
-        let (timestamp, nanos) = self.get_timestamp()?.to_unix();
-        OffsetDateTime::from_unix_timestamp(timestamp as i64)
-            .map(|datetime| datetime + Duration::nanoseconds(nanos.into()))
-            .ok()
+    fn get_datetime(&self) -> Option<DateTime<Utc>> {
+        self.get_timestamp()
+            .map(|ts| ts.to_unix())
+            .map(|(secs, nanos)| secs as i64 * 1_000_000_000 + nanos as i64)
+            .map(DateTime::from_timestamp_nanos)
     }
 }

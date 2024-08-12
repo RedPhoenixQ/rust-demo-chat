@@ -6,11 +6,11 @@ use axum::{
     },
     routing, Form, Router,
 };
+use chrono::NaiveDateTime;
 use maud::{html, Markup};
 use serde::Deserialize;
 use sqlx::{query, query_as, PgPool};
 use std::convert::Infallible;
-use time::{format_description::well_known::Rfc3339, PrimitiveDateTime};
 use uuid::Uuid;
 
 pub mod live;
@@ -28,7 +28,7 @@ use super::ChannelId;
 struct Message {
     id: Uuid,
     content: String,
-    updated: PrimitiveDateTime,
+    updated: NaiveDateTime,
     author: Uuid,
     author_name: String,
 }
@@ -194,7 +194,7 @@ fn render_message(msg: &Message, user_id: &Uuid, swap_oob: bool) -> Result<Marku
             .chat-header {
                 (msg.author_name) " "
                 @let time = msg.id.get_datetime().ok_or(Error::NoTimestampFromUuid { id: msg.id })?;
-                time.text-xs.opacity-50 datetime=(time.format(&Rfc3339)?) {
+                time.text-xs.opacity-50 datetime=(time.to_rfc3339()) {
                     // TODO: Make this a human readable relative time (one minute ago, ...)
                     (time.to_string())
                 }
