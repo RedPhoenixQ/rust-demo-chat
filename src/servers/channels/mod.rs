@@ -40,10 +40,10 @@ pub fn router() -> Router<AppState> {
 }
 
 #[derive(Deserialize)]
-pub struct NewChannel {
+struct NewChannel {
     name: String,
 }
-pub async fn create_channel(
+async fn create_channel(
     State(state): State<AppState>,
     Path(ServerId { server_id }): Path<ServerId>,
     new_channel: Option<Form<NewChannel>>,
@@ -89,7 +89,7 @@ pub async fn create_channel(
     ))
 }
 
-pub async fn delete_channel(
+async fn delete_channel(
     State(state): State<AppState>,
     Path(ChannelId { channel_id }): Path<ChannelId>,
 ) -> Result<impl IntoResponse> {
@@ -104,7 +104,7 @@ pub async fn delete_channel(
     Ok(html!())
 }
 
-pub async fn get_channels(
+async fn get_channels(
     State(state): State<AppState>,
     Path(ServerId { server_id }): Path<ServerId>,
     Query(MaybeChannelId { channel_id }): Query<MaybeChannelId>,

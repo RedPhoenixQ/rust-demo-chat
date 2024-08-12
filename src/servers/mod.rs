@@ -66,10 +66,10 @@ async fn is_user_member_of_server(
 }
 
 #[derive(Deserialize)]
-pub struct NewServer {
+struct NewServer {
     name: String,
 }
-pub async fn create_server(
+async fn create_server(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     new_server: Option<Form<NewServer>>,
@@ -126,7 +126,7 @@ pub async fn create_server(
     ))
 }
 
-pub async fn delete_server(
+async fn delete_server(
     State(state): State<AppState>,
     Path(ServerId { server_id }): Path<ServerId>,
 ) -> Result<impl IntoResponse> {
@@ -141,7 +141,7 @@ pub async fn delete_server(
     Ok(html!())
 }
 
-pub async fn get_servers(
+async fn get_servers(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     Query(MaybeServerId { server_id }): Query<MaybeServerId>,

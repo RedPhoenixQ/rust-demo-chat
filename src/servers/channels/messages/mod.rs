@@ -40,7 +40,7 @@ pub fn router() -> Router<AppState> {
         .route("/events", routing::get(message_event_stream))
 }
 
-pub async fn message_event_stream(
+async fn message_event_stream(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     Path(ChannelId { channel_id }): Path<ChannelId>,
@@ -67,10 +67,10 @@ pub async fn message_event_stream(
 }
 
 #[derive(Deserialize)]
-pub struct SentMessage {
+struct SentMessage {
     content: String,
 }
-pub async fn send_message(
+async fn send_message(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     Path(ChannelId { channel_id }): Path<ChannelId>,
@@ -95,10 +95,10 @@ pub async fn send_message(
 }
 
 #[derive(Deserialize)]
-pub struct MoreOpts {
+struct MoreOpts {
     before: Uuid,
 }
-pub async fn get_more_messages(
+async fn get_more_messages(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     Query(MoreOpts { before }): Query<MoreOpts>,
