@@ -6,8 +6,9 @@ use axum::{
     },
     routing, Form, Router,
 };
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, Utc};
 use maud::{html, Markup};
+use relativetime::RelativeTime;
 use serde::Deserialize;
 use sqlx::{query, query_as, PgPool};
 use std::convert::Infallible;
@@ -195,8 +196,7 @@ fn render_message(msg: &Message, user_id: &Uuid, swap_oob: bool) -> Result<Marku
                 (msg.author_name) " "
                 @let time = msg.id.get_datetime().ok_or(Error::NoTimestampFromUuid { id: msg.id })?;
                 time.text-xs.opacity-50 datetime=(time.to_rfc3339()) {
-                    // TODO: Make this a human readable relative time (one minute ago, ...)
-                    (time.to_string())
+                    (time.signed_duration_since(Utc::now()).to_relative())
                 }
             }
             .chat-bubble.chat-bubble-primary[is_author] {
