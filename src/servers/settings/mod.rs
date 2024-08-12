@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     middleware::{from_fn_with_state, Next},
     response::IntoResponse,
-    routing, Router,
+    Router,
 };
 use maud::{html, Markup};
 use sqlx::query;
@@ -18,19 +18,8 @@ mod members;
 
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
-        .route(
-            "/",
-            routing::get(general::open_general_page).put(general::update_server),
-        )
-        .route(
-            "/members",
-            routing::get(members::open_member_page).post(members::add_member),
-        )
-        .route(
-            "/members/:member_id",
-            routing::delete(members::remove_member),
-        )
-        .route("/members/table", routing::get(members::get_member_table))
+        .nest("/", general::router())
+        .nest("/members", members::router())
         .layer(from_fn_with_state(state.clone(), is_allowed_to_edit_server))
 }
 

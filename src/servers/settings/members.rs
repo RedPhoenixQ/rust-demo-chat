@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     response::IntoResponse,
-    Form,
+    routing, Form, Router,
 };
 use axum_htmx::HxResponseTrigger;
 use maud::{html, Markup};
@@ -19,11 +19,18 @@ use crate::{
 use super::{render_settings_nav, ServerId, SettingsTab};
 
 #[derive(Deserialize)]
-pub struct MemberId {
+struct MemberId {
     member_id: Uuid,
 }
 
-pub async fn open_member_page(
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/", routing::get(open_member_page).post(add_member))
+        .route("/:member_id", routing::delete(remove_member))
+        .route("/table", routing::get(get_member_table))
+}
+
+async fn open_member_page(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     Path(ServerId { server_id }): Path<ServerId>,
@@ -48,10 +55,10 @@ async fn fetch_render_members_page(
 }
 
 #[derive(Deserialize)]
-pub struct AddMember {
+struct AddMember {
     id: Uuid,
 }
-pub async fn add_member(
+async fn add_member(
     State(state): State<AppState>,
     Path(ServerId { server_id }): Path<ServerId>,
     add_member: Option<Form<AddMember>>,
@@ -74,7 +81,7 @@ pub async fn add_member(
     ))
 }
 
-pub async fn remove_member(
+async fn remove_member(
     State(state): State<AppState>,
     Path(ServerId { server_id }): Path<ServerId>,
     Path(MemberId { member_id }): Path<MemberId>,
@@ -116,7 +123,7 @@ fn render_add_member_form(server_id: Uuid) -> Markup {
     )
 }
 
-pub async fn get_member_table(
+async fn get_member_table(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     Path(ServerId { server_id }): Path<ServerId>,

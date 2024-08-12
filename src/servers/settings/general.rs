@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     response::IntoResponse,
-    Form,
+    routing, Form, Router,
 };
 use axum_htmx::HxResponseTrigger;
 use maud::{html, Markup};
@@ -16,6 +16,10 @@ use crate::{
 };
 
 use super::{render_settings_nav, ServerId, SettingsTab};
+
+pub fn router() -> Router<AppState> {
+    Router::new().route("/", routing::get(open_general_page).put(update_server))
+}
 
 fn render_form(server_id: Uuid) -> Markup {
     base_modal(html!(
@@ -39,7 +43,7 @@ fn render_form(server_id: Uuid) -> Markup {
     ))
 }
 
-pub async fn open_general_page(Path(ServerId { server_id }): Path<ServerId>) -> impl IntoResponse {
+async fn open_general_page(Path(ServerId { server_id }): Path<ServerId>) -> impl IntoResponse {
     (
         HxResponseTrigger::normal(["open-main-modal"]),
         render_form(server_id),
@@ -47,10 +51,10 @@ pub async fn open_general_page(Path(ServerId { server_id }): Path<ServerId>) -> 
 }
 
 #[derive(Deserialize)]
-pub struct UpdatedServer {
+struct UpdatedServer {
     name: String,
 }
-pub async fn update_server(
+async fn update_server(
     State(state): State<AppState>,
     Path(ServerId { server_id }): Path<ServerId>,
     Form(updated_server): Form<UpdatedServer>,
