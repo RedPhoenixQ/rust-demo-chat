@@ -14,8 +14,14 @@ type UserRegMsg = (Uuid, oneshot::Sender<mpsc::UnboundedReceiver<UserEvent>>);
 type ChannelEventMsg = (Uuid, Kind);
 
 #[derive(Debug, Clone)]
+pub struct ChannelIds {
+    pub channel_id: Uuid,
+    pub server_id: Uuid,
+}
+
+#[derive(Debug, Clone)]
 pub struct MessageRegistry {
-    pub register: mpsc::Sender<(Uuid, UserRegMsg)>,
+    pub register: mpsc::Sender<(ChannelIds, UserRegMsg)>,
 }
 
 #[derive(Debug)]
@@ -31,7 +37,7 @@ pub async fn create_listener(pool: &PgPool) -> sqlx::Result<MessageRegistry> {
         .listen_all(["insert_message", "update_message", "delete_message"])
         .await?;
 
-    let (register_tx, mut register_rx) = mpsc::channel(4);
+    let (register_tx, mut register_rx) = mpsc::channel::<(ChannelIds, UserRegMsg)>(4);
 
     let pool = pool.clone();
     tokio::spawn(async move {
@@ -50,13 +56,14 @@ pub async fn create_listener(pool: &PgPool) -> sqlx::Result<MessageRegistry> {
                         Err(err) => error!(?err, "Error occured in db listener"),
                     }
                 }
-                Some((channel_id, user_reg_msg)) = register_rx.recv() => {
-                    if let Some((user_tx, _)) = channel_tasks.get(&channel_id) {
+                Some((ids, user_reg_msg)) = register_rx.recv() => {
+                    if let Some((user_tx, _)) = channel_tasks.get(&ids.channel_id) {
                         user_tx.send(user_reg_msg).await.expect("Registration to work");
                     } else {
+                        let channel_id = ids.channel_id.clone();
                         let (user_tx, user_rx) = mpsc::channel(1);
                         let (event_tx, event_rx) = mpsc::channel(1);
-                        spawn_channel_task(user_rx, event_rx, pool.clone());
+                        spawn_channel_task(ids, user_rx, event_rx, pool.clone());
                         user_tx.send(user_reg_msg).await.expect("Registration to work");
                         channel_tasks.insert(channel_id, (user_tx, event_tx));
                     }
@@ -114,6 +121,7 @@ async fn handle_notification(
 }
 
 fn spawn_channel_task(
+    ids: ChannelIds,
     mut register_rx: mpsc::Receiver<UserRegMsg>,
     mut event_rx: mpsc::Receiver<ChannelEventMsg>,
     pool: PgPool,
@@ -124,7 +132,7 @@ fn spawn_channel_task(
             tokio::select! {
                 Some((message_id, kind)) = event_rx.recv() => {
                     let span = debug_span!("Channel Event Task", %message_id, ?kind);
-                    if let Err(err) = handle_message_event(message_id, kind, &mut user_senders, &pool).instrument(span).await {
+                    if let Err(err) = handle_message_event(&ids, message_id, kind, &mut user_senders, &pool).instrument(span).await {
                         error!(?err, "An error occured while sending events to users")
                     };
                }
@@ -139,6 +147,10 @@ fn spawn_channel_task(
 }
 
 async fn handle_message_event(
+    ChannelIds {
+        channel_id,
+        server_id,
+    }: &ChannelIds,
     message_id: Uuid,
     kind: Kind,
     users: &mut BTreeMap<Uuid, mpsc::UnboundedSender<UserEvent>>,
@@ -159,13 +171,19 @@ async fn handle_message_event(
             .fetch_one(pool)
             .await?;
 
-            for (id, tx) in users.iter() {
-                if let Ok(rendered_msg) = render_message(&msg, id, matches!(kind, Kind::Update)) {
+            for (user_id, tx) in users.iter() {
+                if let Ok(rendered_msg) = render_message(
+                    &msg,
+                    user_id,
+                    channel_id,
+                    server_id,
+                    matches!(kind, Kind::Update),
+                ) {
                     if tx
                         .send(Ok(Event::default().event("message").data(rendered_msg.0)))
                         .is_err()
                     {
-                        stale_sender.push(id.to_owned());
+                        stale_sender.push(user_id.to_owned());
                     };
                 }
             }

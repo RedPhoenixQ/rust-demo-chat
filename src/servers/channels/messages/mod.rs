@@ -26,6 +26,11 @@ use crate::{
 
 use super::ChannelId;
 
+#[derive(Deserialize)]
+struct MessageId {
+    message_id: Uuid,
+}
+
 struct Message {
     id: Uuid,
     content: String,
@@ -37,6 +42,13 @@ struct Message {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", routing::post(send_message))
+        .route(
+            "/:message_id",
+            routing::get(get_message)
+                .post(edit_message)
+                .delete(delete_message),
+        )
+        .route("/:message_id/editable", routing::get(edit_message))
         .route("/more", routing::get(get_more_messages))
         .route("/events", routing::get(message_event_stream))
 }
@@ -45,13 +57,20 @@ async fn message_event_stream(
     State(state): State<AppState>,
     Auth { id: user_id }: Auth,
     Path(ChannelId { channel_id }): Path<ChannelId>,
+    Path(ServerId { server_id }): Path<ServerId>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = std::result::Result<Event, Infallible>>>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     state
         .message_live
         .register
-        .send((channel_id, (user_id, tx)))
+        .send((
+            live::ChannelIds {
+                channel_id,
+                server_id,
+            },
+            (user_id, tx),
+        ))
         .await
         .map_err(|_| Error::SSEChannelRegistrationChannelFailed)?;
 
@@ -77,6 +96,7 @@ async fn send_message(
     Path(ChannelId { channel_id }): Path<ChannelId>,
     Form(sent_msg): Form<SentMessage>,
 ) -> Result<impl IntoResponse> {
+    // FIXME: Check if user has access to channel
     let new_id = Uuid::now_v7();
     let rows_affected = query!(
         r#"INSERT INTO messages (id, content, channel, author) VALUES ($1, $2, $3, $4)"#,
@@ -87,6 +107,94 @@ async fn send_message(
     )
     .execute(&state.db)
     .await?;
+
+    if rows_affected.rows_affected() != 1 {
+        return Err(Error::DatabaseActionFailed);
+    }
+
+    Ok(html!())
+}
+
+async fn get_message(
+    State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
+    Path(MessageId { message_id }): Path<MessageId>,
+    Path(ChannelId { channel_id }): Path<ChannelId>,
+    Path(ServerId { server_id }): Path<ServerId>,
+) -> Result<impl IntoResponse> {
+    // FIXME: Allow for getting any message user has access to, not just those they authored
+    let msg = query_as!(
+        Message,
+        r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
+      FROM messages AS m
+      JOIN chat_users AS u ON u.id = m.author
+      WHERE m.id = $1 AND m.author = $2"#,
+        message_id,
+        user_id
+    )
+    .fetch_one(&state.db)
+    .await?;
+    return Ok(render_message(
+        &msg,
+        &user_id,
+        &channel_id,
+        &server_id,
+        false,
+    )?);
+}
+
+#[derive(Deserialize)]
+struct UpdatedMessage {
+    content: String,
+}
+async fn edit_message(
+    State(state): State<AppState>,
+    Auth { id: user_id }: Auth,
+    Path(MessageId { message_id }): Path<MessageId>,
+    Path(ChannelId { channel_id }): Path<ChannelId>,
+    Path(ServerId { server_id }): Path<ServerId>,
+    updated_msg: Option<Form<UpdatedMessage>>,
+) -> Result<impl IntoResponse> {
+    // FIXME: Check if allowed to edit
+    let Some(Form(updated_msg)) = updated_msg else {
+        let msg = query_as!(
+            Message,
+            r#"SELECT m.id, m.content, m.updated, m.author, u.name as author_name 
+          FROM messages AS m
+          JOIN chat_users AS u ON u.id = m.author
+          WHERE m.id = $1 AND m.author = $2"#,
+            message_id,
+            user_id
+        )
+        .fetch_one(&state.db)
+        .await?;
+        return Ok(render_message_for_edit(&msg, &server_id, &channel_id)?);
+    };
+
+    let rows_affected = query!(
+        r#"UPDATE messages SET content = $1 WHERE id = $2 AND author = $3"#,
+        updated_msg.content,
+        message_id,
+        user_id
+    )
+    .execute(&state.db)
+    .await?;
+
+    if rows_affected.rows_affected() != 1 {
+        return Err(Error::DatabaseActionFailed);
+    }
+
+    Ok(html!())
+}
+
+async fn delete_message(
+    State(state): State<AppState>,
+    Path(MessageId { message_id }): Path<MessageId>,
+) -> Result<impl IntoResponse> {
+    // FIXME: Check if allowed to delete
+    let rows_affected = query!(r#"DELETE FROM messages WHERE id = $1"#, message_id)
+        .execute(&state.db)
+        .await?;
 
     if rows_affected.rows_affected() != 1 {
         return Err(Error::DatabaseActionFailed);
@@ -169,7 +277,7 @@ fn render_messages(
 ) -> Result<Markup> {
     Ok(html!(
         @for msg in messages {
-            (render_message(msg, &user_id, false)?)
+            (render_message(msg, &user_id, &channel_id, &server_id, false)?)
         }
         @if let Some(last_msg) = messages.last() {
             @if should_load_more {
@@ -183,27 +291,85 @@ fn render_messages(
     ))
 }
 
-fn render_message(msg: &Message, user_id: &Uuid, swap_oob: bool) -> Result<Markup> {
+fn render_message(
+    msg: &Message,
+    user_id: &Uuid,
+    channel_id: &Uuid,
+    server_id: &Uuid,
+    swap_oob: bool,
+) -> Result<Markup> {
     let is_author = &msg.author == user_id;
     Ok(html!(
-        li.chat
+        li.group.chat
             .chat-end[is_author]
             .chat-start[!is_author]
             #{"msg-"(msg.id)}
             hx-swap-oob=[swap_oob.then_some("true")]
         {
             .chat-header {
+                @let created_at = msg.id.get_datetime().ok_or(Error::NoTimestampFromUuid { id: msg.id })?;
+                @if msg.updated.and_utc() > created_at {
+                    span.italic.text-xs.opacity-50 {
+                        "Edited "
+                    }
+                }
                 (msg.author_name) " "
-                @let time = msg.id.get_datetime().ok_or(Error::NoTimestampFromUuid { id: msg.id })?;
-                time.text-xs.opacity-50 datetime=(time.to_rfc3339()) {
-                    (time.signed_duration_since(Utc::now()).to_relative())
+                time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
+                    (created_at.signed_duration_since(Utc::now()).to_relative())
                 }
             }
             .chat-bubble.chat-bubble-primary[is_author] {
                 (msg.content)
             }
-            .chat-footer {
-                (msg.updated.to_string())
+            .chat-footer.transition-opacity hx-target="closest li" hx-swap="outerHTML" {
+                @if is_author {
+                    button
+                        class="link mr-2 opacity-0 group-hover:opacity-100"
+                        hx-get={"/servers/"(server_id)"/channels/"(channel_id)"/messages/"(msg.id)"/editable"}
+                        { "Edit" }
+                }
+                button
+                    class="link link-error opacity-0 group-hover:opacity-100"
+                    hx-delete={"/servers/"(server_id)"/channels/"(channel_id)"/messages/"(msg.id)}
+                    hx-confirm="Are you sure?"
+                    { "Delete" }
+            }
+        }
+    ))
+}
+
+fn render_message_for_edit(msg: &Message, server_id: &Uuid, channel_id: &Uuid) -> Result<Markup> {
+    Ok(html!(
+        li.group.chat.chat-end
+            #{"msg-"(msg.id)}
+        {
+            .chat-header {
+                @let created_at = msg.id.get_datetime().ok_or(Error::NoTimestampFromUuid { id: msg.id })?;
+                @if msg.updated.and_utc() > created_at {
+                    span.italic.text-xs.opacity-50 {
+                        "Edited "
+                    }
+                }
+                (msg.author_name) " "
+                time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
+                    (created_at.signed_duration_since(Utc::now()).to_relative())
+                }
+            }
+            form.chat-bubble.chat-bubble-primary
+                hx-post={"/servers/"(server_id)"/channels/"(channel_id)"/messages/"(msg.id)}
+            {
+                input class="input text-base-content" name="content" value=(msg.content);
+            }
+            .chat-footer hx-target="closest li" hx-swap="outerHTML" {
+                button
+                    class="link mr-2"
+                    hx-get={"/servers/"(server_id)"/channels/"(channel_id)"/messages/"(msg.id)}
+                    { "Cancel" }
+                button
+                    class="link link-error"
+                    hx-delete={"/servers/"(server_id)"/channels/"(channel_id)"/messages/"(msg.id)}
+                    hx-confirm="Are you sure?"
+                    { "Delete" }
             }
         }
     ))
