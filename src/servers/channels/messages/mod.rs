@@ -6,7 +6,7 @@ use axum::{
     },
     routing, Form, Router,
 };
-use chrono::{NaiveDateTime, Utc};
+use chrono::{NaiveDateTime, SubsecRound, Utc};
 use maud::{html, Markup};
 use relativetime::RelativeTime;
 use serde::Deserialize;
@@ -98,9 +98,11 @@ async fn send_message(
 ) -> Result<impl IntoResponse> {
     // FIXME: Check if user has access to channel
     let new_id = Uuid::now_v7();
+    let timestamp = new_id.get_datetime().expect("v7 uuid to return datetime");
     let rows_affected = query!(
-        r#"INSERT INTO messages (id, content, channel, author) VALUES ($1, $2, $3, $4)"#,
+        r#"INSERT INTO messages (id, updated, content, channel, author) VALUES ($1, $2, $3, $4, $5)"#,
         new_id,
+        timestamp.naive_utc(),
         sent_msg.content,
         channel_id,
         user_id
@@ -315,7 +317,7 @@ fn render_message(
                 }
                 (msg.author_name) " "
                 time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
-                    (created_at.signed_duration_since(Utc::now()).to_relative())
+                    (created_at.signed_duration_since(Utc::now().round_subsecs(3)).to_relative())
                 }
             }
             .chat-bubble.chat-bubble-primary[is_author] {
@@ -352,7 +354,7 @@ fn render_message_for_edit(msg: &Message, server_id: &Uuid, channel_id: &Uuid) -
                 }
                 (msg.author_name) " "
                 time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
-                    (created_at.signed_duration_since(Utc::now()).to_relative())
+                    (created_at.signed_duration_since(Utc::now().round_subsecs(3)).to_relative())
                 }
             }
             form.chat-bubble.chat-bubble-primary
