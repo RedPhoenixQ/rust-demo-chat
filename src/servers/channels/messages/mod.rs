@@ -172,7 +172,7 @@ async fn edit_message(
     };
 
     let rows_affected = query!(
-        r#"UPDATE messages SET content = $1 WHERE id = $2 AND author = $3"#,
+        r#"UPDATE messages SET updated = NOW(), content = $1 WHERE id = $2 AND author = $3"#,
         updated_msg.content,
         message_id,
         user_id
