@@ -2422,6 +2422,10 @@ input.tab:checked + .tab-content,
           appearance: none;
 }
 
+.flex-row-reverse {
+  flex-direction: row-reverse;
+}
+
 .flex-col-reverse {
   flex-direction: column-reverse;
 }

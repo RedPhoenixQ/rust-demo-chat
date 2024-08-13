@@ -307,17 +307,17 @@ fn render_message(
             #{"msg-"(msg.id)}
             hx-swap-oob=[swap_oob.then_some("true")]
         {
-            .chat-header {
+            .chat-header.flex.items-center.gap-2.flex-row-reverse[!is_author] {
                 @let created_at = msg.id.get_datetime().ok_or(Error::NoTimestampFromUuid { id: msg.id })?;
+                relative-time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
+                    (created_at.to_rfc2822()) " "
+                }
                 @if msg.updated.and_utc() > created_at {
                     span.italic.text-xs.opacity-50 {
                         "Edited "
                     }
                 }
-                (msg.author_name) " "
-                relative-time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
-                    (created_at.to_rfc2822())
-                }
+                (msg.author_name)
             }
             .chat-bubble.chat-bubble-primary[is_author] {
                 (msg.content)
@@ -344,17 +344,17 @@ fn render_message_for_edit(msg: &Message, server_id: &Uuid, channel_id: &Uuid) -
         li.group.chat.chat-end
             #{"msg-"(msg.id)}
         {
-            .chat-header {
+            .chat-header.flex.items-center.gap-2 {
                 @let created_at = msg.id.get_datetime().ok_or(Error::NoTimestampFromUuid { id: msg.id })?;
-                @if msg.updated.and_utc() > created_at {
-                    span.italic.text-xs.opacity-50 {
-                        "Edited "
-                    }
-                }
-                (msg.author_name) " "
                 relative-time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
                     (created_at.to_rfc2822())
                 }
+                @if msg.updated.and_utc() > created_at {
+                    span.italic.text-xs.opacity-50 {
+                        "Edited"
+                    }
+                }
+                (msg.author_name)
             }
             form.chat-bubble.chat-bubble-primary
                 hx-post={"/servers/"(server_id)"/channels/"(channel_id)"/messages/"(msg.id)}
