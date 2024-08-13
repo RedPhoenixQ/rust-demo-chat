@@ -714,12 +714,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
-name = "humantime"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
-
-[[package]]
 name = "hyper"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1315,16 +1309,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a66a03ae7c801facd77a29370b4faec201768915ac14a721ba36f20bc9c209b"
 
 [[package]]
-name = "relativetime"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87b093e81f7b2ee8db5253e1343a98c8334bd5e7214e507e188d2450084e1c8d"
-dependencies = [
- "chrono",
- "humantime",
-]
-
-[[package]]
 name = "rsa"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1353,7 +1337,6 @@ dependencies = [
  "axum-htmx",
  "chrono",
  "maud",
- "relativetime",
  "serde",
  "sqlx",
  "tokio",

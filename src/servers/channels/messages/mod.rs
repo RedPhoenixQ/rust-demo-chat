@@ -6,9 +6,8 @@ use axum::{
     },
     routing, Form, Router,
 };
-use chrono::{NaiveDateTime, SubsecRound, Utc};
+use chrono::NaiveDateTime;
 use maud::{html, Markup};
-use relativetime::RelativeTime;
 use serde::Deserialize;
 use sqlx::{query, query_as, PgPool};
 use std::convert::Infallible;
@@ -316,8 +315,8 @@ fn render_message(
                     }
                 }
                 (msg.author_name) " "
-                time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
-                    (created_at.signed_duration_since(Utc::now().round_subsecs(3)).to_relative())
+                relative-time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
+                    (created_at.to_rfc2822())
                 }
             }
             .chat-bubble.chat-bubble-primary[is_author] {
@@ -353,8 +352,8 @@ fn render_message_for_edit(msg: &Message, server_id: &Uuid, channel_id: &Uuid) -
                     }
                 }
                 (msg.author_name) " "
-                time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
-                    (created_at.signed_duration_since(Utc::now().round_subsecs(3)).to_relative())
+                relative-time.text-xs.opacity-50 datetime=(created_at.to_rfc3339()) {
+                    (created_at.to_rfc2822())
                 }
             }
             form.chat-bubble.chat-bubble-primary

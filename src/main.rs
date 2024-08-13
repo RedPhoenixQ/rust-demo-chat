@@ -20,6 +20,9 @@ const HTMX_SCRIPT: PreEscaped<&str> = PreEscaped(
 );
 const HTMX_SSE_SCRIPT: PreEscaped<&str> =
     PreEscaped(r#"<script src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js"></script>"#);
+const RELATIVE_TIME_WEB_COMPONENT: PreEscaped<&str> = PreEscaped(
+    r#"<script type="module" src="https://unpkg.com/@github/relative-time-element@4.4.2/dist/bundle.js"></script>"#,
+);
 
 fn base_tempalte(content: maud::Markup) -> maud::Markup {
     html!(
@@ -28,6 +31,7 @@ fn base_tempalte(content: maud::Markup) -> maud::Markup {
             head {
                 (HTMX_SCRIPT)
                 (HTMX_SSE_SCRIPT)
+                (RELATIVE_TIME_WEB_COMPONENT)
                 link rel="stylesheet" href="/styles.css";
             }
             body class="min-h-screen" hx-boost="true" hx-on-open-main-modal="mainModal.showModal()" {
